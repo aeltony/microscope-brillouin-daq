@@ -1,0 +1,23 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31112.23
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "microscope-brillouin-daq", "microscope-brillouin-daq.pyproj", "{EC8964C1-9C63-42B2-AB0F-D68A0CA25795}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EC8964C1-9C63-42B2-AB0F-D68A0CA25795}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EC8964C1-9C63-42B2-AB0F-D68A0CA25795}.Release|Any CPU.ActiveCfg = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {54A0DDD0-C637-47FF-A0E5-3B9672C57280}
+	EndGlobalSection
+EndGlobal
