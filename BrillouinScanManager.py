@@ -86,6 +86,8 @@ class ScanManager(QtCore.QThread):
 
 		# Switch to sample arm
 		self.shutter.setShutterState((1, 0))
+		self.sequentialAcqList[0].forceSetExposure(self.scanSettings['sampleExp'])
+		self.sequentialAcqList[0].pauseBGsubtraction(False)
 
 		print("[ScanManager/run] Start")
 
@@ -165,6 +167,7 @@ class ScanManager(QtCore.QThread):
 					else: # take calibration data at end of line
 						self.shutter.setShutterState((0, 1)) # switch to reference arm
 						self.sequentialAcqList[0].forceSetExposure(self.scanSettings['refExp'])
+						self.sequentialAcqList[0].pauseBGsubtraction(True)
 						for idx, f in enumerate(calFreq):
 							self.synth.setFreq(f)
 							time.sleep(0.01)
@@ -179,6 +182,7 @@ class ScanManager(QtCore.QThread):
 						# return to sample arm
 						self.shutter.setShutterState((1, 0))
 						self.sequentialAcqList[0].forceSetExposure(self.scanSettings['sampleExp'])
+						self.sequentialAcqList[0].pauseBGsubtraction(False)
 				if j < frames[1]-1:
 					if i%2 == 0:
 						self.motor.moveRelative('y', step[1])

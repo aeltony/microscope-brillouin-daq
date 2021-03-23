@@ -31,6 +31,9 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         self.imageBufferPointer = self.imageBuffer.ctypes.data_as(c_int32_p)
 
         self.autoExp = False
+        self.bgSubtraction = False
+        self.pauseBG = False
+        self.triggerBG = False
 
     # set up default parameters
     def set_up(self):
@@ -58,8 +61,22 @@ class AndorDevice(Devices.BrillouinDevice.Device):
     def __del__(self):
         return 0
 
+    def startBGsubtraction(self):
+        self.triggerBG = True
+
+    def stopBGsubtraction(self):
+        self.bgSubtraction = False
+
+    def pauseBGsubtraction(self, pauseStatus):
+        self.pauseBG = pauseStatus
+        print('Background subtraction pause status =', pauseStatus)
+
     # getData() acquires an image from Andor
     def getData(self):
+        if self.triggerBG:
+            self.bgImage = self.getBG()
+            self.triggerBG = False
+            self.bgSubtraction = True
         if self.autoExp:
             (im_arr, expTime) = self.getData2()
         else:
@@ -70,8 +87,25 @@ class AndorDevice(Devices.BrillouinDevice.Device):
             imageSize = int(self.cam.GetAcquiredDataDim())
             # return a copy of the data, since the buffer is reused for next frame
             im_arr = np.array(self.imageBuffer[0:imageSize], copy=True, dtype = np.uint16)
+            if self.bgSubtraction and not self.pauseBG:
+                im_arr = im_arr - self.bgImage
         return (im_arr, expTime)
 
+    def getBG(self):
+        #print("[Andor] getBG begin")
+        with self.andor_lock:
+            self.cam.StartAcquisition()
+            self.cam.GetAcquiredData2(self.imageBufferPointer)
+        imageSize = int(self.cam.GetAcquiredDataDim())
+        bgImgArr = np.array(self.imageBuffer[0:imageSize], copy=True, dtype = np.uint16)
+        for k in np.arange(4):
+            with self.andor_lock:
+                self.cam.StartAcquisition()
+                self.cam.GetAcquiredData2(self.imageBufferPointer)
+            imageSize = int(self.cam.GetAcquiredDataDim())
+            bgImgArr = bgImgArr + np.array(self.imageBuffer[0:imageSize], copy=True, dtype = np.uint16)
+        bgImage = bgImgArr/5
+        return bgImage
 
     def getData2(self):
         print("[Andor] getData2 begin")
