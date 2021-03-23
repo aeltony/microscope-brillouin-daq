@@ -255,10 +255,12 @@ class AndorProcessFreerun(Devices.BrillouinDevice.DeviceProcess):
         sline = binned_image[int(round(self.cropHeight/self.binHeight)), :]
 
         # Create images for GUI display
-        scaled_image = cropped_image*(255.0/cropped_image.max())
+        positive_image = np.clip(cropped_image, 0, 1e12)
+        scaled_image = positive_image*(255.0/positive_image.max())
         scaled_image = scaled_image.astype(int)
         scaled_8bit = np.array(scaled_image, dtype = np.uint8)
-        scaled_binned = binned_image*(255.0/binned_image.max())
+        positive_binned = np.clip(binned_image, 0, 1e12)
+        scaled_binned = positive_binned*(255.0/positive_binned.max())
         scaled_binned = scaled_binned.astype(int)
         binned_8bit = np.array(scaled_binned, dtype = np.uint8)
         # Resize images to fit GUI window
