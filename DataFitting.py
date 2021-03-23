@@ -12,14 +12,17 @@ from scipy.ndimage.filters import gaussian_filter
 # ftol and xtol are fitting tolerances (adjust for speed vs. accuracy)
 def fitSpectrum(sline, xtol=1e-6, ftol=1e-6, maxfev=500):
 	start = timer()
-	weights = np.sqrt(sline)  # Weight data by SNR
+	posSline = np.abs(sline)
+	weights = np.sqrt(posSline)  # Weight data by SNR
 
 	# Find peak locations:
-	prominence = 0.05*np.amax(sline)
+	prominence = 0.05*np.amax(posSline)
+	wlen = 5*prominence
 	pk_ind, pk_info = find_peaks(sline, prominence=prominence, width=2, \
-		height=100, rel_height=0.5, wlen=0.25*np.amax(sline))
+		height=100, rel_height=0.5, wlen=wlen)
 	pk_wids = 0.5*pk_info['widths']
 	pk_hts = np.pi*pk_wids*pk_info['peak_heights']
+	#print("pk_ind = ", pk_ind)
 	
 	# Check for extra peaks from adjacent orders:
 	if len(pk_ind)>2:
