@@ -21,6 +21,7 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         self.cam.SetVerbose(False)
         self.cam.Initialize()
         self.set_up()
+        self.cam.CreateBuffer()
         self.andor_lock = app.andor_lock
         self.runMode = 0    #0 is free running, 1 is scan
 
@@ -47,8 +48,10 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         self.cam.SetPixelEncoding(u'Mono32')
         self.cam.SetHBin(1)
         self.cam.SetVBin(1)
-        self.cam.SetHeight(2048)
-        self.cam.SetWidth(2048)
+        self.cam.SetWidth(50)
+        self.cam.SetAOILeft(942)
+        self.cam.SetHeight(210)
+        self.cam.SetAOITop(1064)
         self.cam.SetExposureTime(.1)
         self.cam.SetCoolerMode(True)  # Continuous cooling
         self.cam.GetTemperature()
@@ -152,12 +155,33 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         with self.andor_lock:
             return self.cam.exposure
 
+    def setLeftPx(self, pixel):
+        # pause device acquisition first
+        self.pause()
+        with self.andor_lock:
+            try:
+                reply = self.cam.SetAOILeft(pixel)
+            except:
+                print('[AndorDevice] Could not setLeftPx')
+            print("[AndorDevice] AOILeft set to %d px" % pixel)
+        self.unpause()
+
+    def setTopPx(self, pixel):
+        # pause device acquisition first
+        self.pause()
+        with self.andor_lock:
+            try:
+                reply = self.cam.SetAOITop(pixel)
+            except:
+                print('[AndorDevice] Could not setTopPx')
+            print("[AndorDevice] AOITop set to %d px" % pixel)
+        self.unpause()
+
     def setExposure(self, exposureTime):
         #print('[AndorDevice] setExposure got called!')
         with self.andor_lock:
             try:
                 reply = self.cam.SetExposureTime(exposureTime)
-                #print('reply = ', reply)
             except:
                 print('[AndorDevice] Could not setExposure')
         #self.changeSetting(self.andor_lock, lambda:self.cam.SetExposureTime(exposureTime))
@@ -171,13 +195,6 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         except:
             print('[AndorDevice] Could not forceSetExposure')
         print("[AndorDevice] Exposure set to %f s" % exposureTime)
-
-    #def setTemperature(self, desiredTemp):
-    #    if (desiredTemp < 0 or desiredTemp > 20):
-    #        print("[AndorDevice/setTemperature] Temperature out of range")
-    #        return
-    #    self.changeSetting(self.andor_lock, lambda:self.cam.SetTemperature(int(desiredTemp)))
-    #    print("[AndorDevice] Temperature set to %d" % desiredTemp)
 
     def getTemperature(self):
         temp = self.getAndorSetting(self.cam.GetTemperature, 'temperature')
@@ -200,62 +217,20 @@ class AndorProcessFreerun(Devices.BrillouinDevice.DeviceProcess):
 
     def __init__(self, device, stopProcessingEvent, finishedTrigger = None):
         super(AndorProcessFreerun, self).__init__(device, stopProcessingEvent, finishedTrigger)
-
-        self._sampleSpectCenter = 255 # default value
-        self._sampleSlineIdx = 32 # default value
         self.binHeight = 10 # number of vertical pixels to bin
-        self.cropHeight = 25 # typical: 3
-        self.cropWidth = 105 # typical: 50
-        self.extraCrop = 35
-
-    @property
-    def sampleSpectCenter(self):
-        with self.flagLock:
-            return self._sampleSpectCenter
-
-    # you can use sampleSpectCenter as if it were a class attribute, e.g.
-    # pixel = self.sampleSpectCenter
-    # self.sampleSpectCenter = spectrumCenter
-    @sampleSpectCenter.setter
-    def sampleSpectCenter(self, spectrumCenter):
-        with self.flagLock:
-            self._sampleSpectCenter = spectrumCenter
-
-    @property
-    def sampleSlineIdx(self):
-        with self.flagLock:
-            return self._sampleSlineIdx
-
-    @sampleSlineIdx.setter
-    def sampleSlineIdx(self, slineIndex):
-        with self.flagLock:
-            self._sampleSlineIdx = slineIndex
 
     # data is an numpy array of type int32
     def doComputation(self, data):
-        image_array = data[0] # np.array(data, dtype = np.uint16)
+        proper_image = data[0] # np.array(data, dtype = np.uint16)
         exp_time = data[1]
-        #print('exp_time = ', exp_time)
-        proper_image = np.reshape(image_array, (-1, 2048))   # 2048 columns
+        proper_image = np.reshape(proper_image, (-1, 50))   # 50 columns
         proper_image = np.rot90(proper_image, 1, (1,0)) # Rotate by 90 deg.
-
-        # Find spectral line
-        sline_idx = self.sampleSlineIdx
-        mid = self.sampleSpectCenter
-        if (sline_idx < self.cropHeight):
-            loc = self.cropHeight
-        elif (sline_idx >= proper_image.shape[0]-self.cropHeight):
-            loc = proper_image.shape[0]-self.cropHeight-1
-        else:
-            loc = sline_idx
-        # Crop image to ROI
-        cropped_image = proper_image[loc-self.cropHeight:loc+self.cropHeight, mid-self.cropWidth:mid+self.cropWidth]
         # Perform software binning
-        binned_image = cropped_image.reshape(-1, self.binHeight, cropped_image.shape[-1]).sum(1)
-        sline = binned_image[int(round(self.cropHeight/self.binHeight)), :]
+        binned_image = proper_image.reshape(-1, self.binHeight, proper_image.shape[-1]).sum(1)
+        sline = binned_image[int(round(0.5*proper_image.shape[0]/self.binHeight)), :]
 
         # Create images for GUI display
-        positive_image = np.clip(cropped_image, 0, 1e12)
+        positive_image = np.clip(proper_image, 0, 1e12)
         scaled_image = positive_image*(255.0/positive_image.max())
         scaled_image = scaled_image.astype(int)
         scaled_8bit = np.array(scaled_image, dtype = np.uint8)
@@ -264,22 +239,19 @@ class AndorProcessFreerun(Devices.BrillouinDevice.DeviceProcess):
         scaled_binned = scaled_binned.astype(int)
         binned_8bit = np.array(scaled_binned, dtype = np.uint8)
         # Resize images to fit GUI window
-        image = cv2.resize(scaled_8bit, (0,0), fx=850/(2*self.cropWidth), fy=200/(2*self.cropHeight), \
+        image = cv2.resize(scaled_8bit, (0,0), fx=850/scaled_8bit.shape[1], fy=200/scaled_8bit.shape[0], \
             interpolation = cv2.INTER_NEAREST)
-        binned = cv2.resize(binned_8bit, (0,0), fx=420/(2*self.cropWidth), fy=105/(2*self.cropHeight/self.binHeight), \
+        binned = cv2.resize(binned_8bit, (0,0), fx=420/binned_8bit.shape[1], fy=105/binned_8bit.shape[0], \
             interpolation = cv2.INTER_NEAREST)
-
-        # Crop sline smaller for fitting
-        sline_crop = sline[self.extraCrop:-self.extraCrop]
 
         #### Fitting Brillouin spectrum
-        interPeakDist, fittedSpect = DataFitting.fitSpectrum(np.copy(sline_crop.astype(float)),1e-4,1e-4,50)
+        interPeakDist, fittedSpect = DataFitting.fitSpectrum(np.copy(sline.astype(float)),1e-4,1e-4,50)
         # emit signals for GUI to update in real time
         self.updateSampleBrillouinSeqSig.emit(interPeakDist)
-        self.updateSampleSpectrum.emit((np.copy(sline_crop), np.copy(fittedSpect)))
+        self.updateSampleSpectrum.emit((np.copy(sline), np.copy(fittedSpect)))
         self.updateSampleImageSig.emit(np.copy(image))
         self.updateBinnedImageSig.emit(np.copy(binned))
 
         # return value is pushed into a Queue, which is collected by the ScanManager
         # for global processing (i.e. Brillouin value segmentation)
-        return (proper_image, sline_crop, image, exp_time)
+        return (proper_image, sline, image, exp_time)

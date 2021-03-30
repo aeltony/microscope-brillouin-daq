@@ -62,8 +62,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         laserX = self.configParser.getint('Scan', 'laser_position_X')
         laserY = self.configParser.getint('Scan', 'laser_position_Y')
         RFpower = self.configParser.getfloat('Synth', 'RFpower')
-        sampleSpectCenter = self.configParser.getint('Andor', 'sampleSpectCenter')
-        sampleSlineIdx = self.configParser.getint('Andor', 'sampleSlineIdx')
+        spectColumn = self.configParser.getint('Andor', 'spectColumn')
+        spectRow = self.configParser.getint('Andor', 'spectRow')
 
         self.params = [
             {'name': 'Scan', 'type': 'group', 'children': [
@@ -109,11 +109,11 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             ]},
             {'name': 'Spectrometer Camera', 'type': 'group', 'children': [
                 {'name': 'Background Subtraction', 'type':'toggle', 'ButtonText':('Turn on background subtraction', 'Turn off background subtraction')},
-                {'name': 'Exposure', 'type':'float', 'value':0.2, 'suffix':' s', 'step':0.05, 'limits':(0.01, 10)},
+                {'name': 'Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.05, 'limits':(0.01, 10)},
                 {'name': 'Ref. Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.05, 'limits':(0.01, 10)},
                 {'name': 'AutoExposure', 'type':'toggle', 'ButtonText':('Auto exposure', 'Fixed exposure')},         #False=Fixed exposure
-                {'name': 'Sample Column', 'type':'int', 'value': sampleSpectCenter, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
-                {'name': 'Sample Row', 'type':'int', 'value': sampleSlineIdx, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
+                {'name': 'Spectrum Column', 'type':'int', 'value': spectColumn, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
+                {'name': 'Spectrum Row', 'type':'int', 'value': spectRow, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
                 {'name': 'Camera Temp.', 'type': 'float', 'value':0, 'suffix':' C', 'readonly': True}
             ]},        
             {'name': 'Microscope Camera', 'type': 'group', 'children': [
@@ -130,10 +130,11 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             self.CMOSvLineValueChange)
         self.allParameters.child('Scan').child('More Settings').child('Laser Focus Y').sigValueChanging.connect(
             self.CMOShLineValueChange)
-        self.allParameters.child('Spectrometer Camera').child('Sample Column').sigValueChanged.connect(
-            self.sampleSpectCenterValueChange)
-        self.allParameters.child('Spectrometer Camera').child('Sample Row').sigValueChanged.connect(
-            self.sampleSlineIdxValueChange)
+        # Spectrum Column / Row adjustment
+        self.allParameters.child('Spectrometer Camera').child('Spectrum Column').sigValueChanging.connect(
+            self.spectColumnValueChange)
+        self.allParameters.child('Spectrometer Camera').child('Spectrum Row').sigValueChanging.connect(
+            self.spectRowValueChange)
 
         self.model = BrillouinTreeModel()
 
@@ -284,8 +285,6 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
         self.mainUI()
 
-        self.AndorProcessThread.sampleSpectCenter = self.allParameters.child('Spectrometer Camera').child('Sample Column').value()
-        self.AndorProcessThread.sampleSlineIdx = self.allParameters.child('Spectrometer Camera').child('Sample Row').value()
         self.AndorDeviceThread.start()
         self.AndorDeviceThread.setPriority(QtCore.QThread.TimeCriticalPriority)
         self.AndorProcessThread.start()
@@ -318,16 +317,15 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 
-    def sampleSpectCenterValueChange(self, param, value):
-        # print("[sampleSpectCenterValueChange]")
-        self.AndorProcessThread.sampleSpectCenter = self.allParameters.child('Spectrometer Camera').child('Sample Column').value()
-        self.configParser.set('Andor', 'sampleSpectCenter', str(int(value)))
+    def spectColumnValueChange(self, param, value):
+        self.AndorDeviceThread.setTopPx(int(value))
+        self.configParser.set('Andor', 'spectColumn', str(int(value)))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 
-    def sampleSlineIdxValueChange(self, param, value):
-        self.AndorProcessThread.sampleSlineIdx = self.allParameters.child('Spectrometer Camera').child('Sample Row').value()
-        self.configParser.set('Andor', 'sampleSlineIdx', str(int(value)))
+    def spectRowValueChange(self, param, value):
+        self.AndorDeviceThread.setLeftPx(int(value))
+        self.configParser.set('Andor', 'spectRow', str(int(value)))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 

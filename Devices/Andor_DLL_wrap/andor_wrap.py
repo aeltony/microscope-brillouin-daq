@@ -72,6 +72,9 @@ class Andor:
         #print('self.handle =', self.handle)
         self.GetCameraSerialNumber()
         print("[AndorDevice] Zyla sCMOS camera found: ", self.serial)
+        return ERROR_CODE[error]
+
+    def CreateBuffer(self):
         # Create buffer for Andor DLL image acquisition
         self.im_size = self.GetImageSize()
         self.buffer_size = self.im_size.value
@@ -79,7 +82,6 @@ class Andor:
         imageBuffer = np.array([0 for i in range(self.buffer_size*2)])
         imageBuffer = imageBuffer.astype(np.int32)
         self.imageBufferPointer = imageBuffer.ctypes.data_as(c_int32_p)
-        return ERROR_CODE[error]
         
     def ShutDown(self):
         error1 = self.dll.AT_Flush(self.handle)
