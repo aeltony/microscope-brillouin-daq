@@ -81,18 +81,18 @@ class AndorDevice(Devices.BrillouinDevice.Device):
             self.triggerBG = False
             self.bgSubtraction = True
         if self.autoExp:
-            (im_arr, expTime) = self.getData2()
+            im_arr = self.getData2()
         else:
             with self.andor_lock:
                 self.cam.StartAcquisition()
                 self.cam.GetAcquiredData2(self.imageBufferPointer)
-            expTime = self.getExposure()
+            #expTime = self.getExposure()
             imageSize = int(self.cam.GetAcquiredDataDim())
             # return a copy of the data, since the buffer is reused for next frame
             im_arr = np.array(self.imageBuffer[0:imageSize], copy=True, dtype = np.uint16)
             if self.bgSubtraction and not self.pauseBG:
                 im_arr = im_arr - self.bgImage
-        return (im_arr, expTime)
+        return im_arr
 
     def getBG(self):
         #print("[Andor] getBG begin")
@@ -133,7 +133,7 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         imageSize = self.cam.GetAcquiredDataDim()
         # return a copy of the data, since the buffer is reused for next frame
         im_arr = np.array(self.imageBuffer[0:imageSize], copy=True, dtype = np.uint16)
-        return (im_arr, adjustedExpTime)
+        return im_arr
 
 
     def getAndorSetting(self, functionHandle, attribute):
@@ -221,9 +221,7 @@ class AndorProcessFreerun(Devices.BrillouinDevice.DeviceProcess):
 
     # data is an numpy array of type int32
     def doComputation(self, data):
-        proper_image = data[0] # np.array(data, dtype = np.uint16)
-        exp_time = data[1]
-        proper_image = np.reshape(proper_image, (-1, 50))   # 50 columns
+        proper_image = np.reshape(data, (-1, 50))   # 50 columns
         proper_image = np.rot90(proper_image, 1, (1,0)) # Rotate by 90 deg.
         # Perform software binning
         binned_image = proper_image.reshape(-1, self.binHeight, proper_image.shape[-1]).sum(1)
@@ -254,4 +252,4 @@ class AndorProcessFreerun(Devices.BrillouinDevice.DeviceProcess):
 
         # return value is pushed into a Queue, which is collected by the ScanManager
         # for global processing (i.e. Brillouin value segmentation)
-        return (proper_image, sline, image, exp_time)
+        return (proper_image, sline, interPeakDist)

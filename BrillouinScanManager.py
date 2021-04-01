@@ -29,6 +29,8 @@ class ScanManager(QtCore.QThread):
         # TODO: change to dictionary
 		self.sequentialAcqList = []
 		self.sequentialProcessingList = []
+		self.partialAcqList = []
+		self.partialProcessingList = []
 		self.freerunningList = []
 		self.stop_event = stop_event
 
@@ -56,6 +58,10 @@ class ScanManager(QtCore.QThread):
 	def addToSequentialList(self, deviceThread, processingThread):
 		self.sequentialAcqList.append(deviceThread)
 		self.sequentialProcessingList.append(processingThread)
+	# PartialAcqList is for data that is only acquired during parts of the scan
+	def addToPartialList(self, deviceThread, processingThread):
+		self.partialAcqList.append(deviceThread)
+		self.partialProcessingList.append(processingThread)
 
 	def addToFreerunningList(self, deviceThread):
 		self.freerunningList.append(deviceThread)
@@ -92,9 +98,9 @@ class ScanManager(QtCore.QThread):
 		print("[ScanManager/run] Start")
 
 		# first turn off free running mode
-		for dev in self.sequentialAcqList:
+		for dev in self.sequentialAcqList + self.partialAcqList:
 			dev.sendPauseSignal()
-		for dev in self.sequentialAcqList:
+		for dev in self.sequentialAcqList + self.partialAcqList:
 			dev.waitForPause()
 			dev.runMode = 1
 
@@ -102,7 +108,7 @@ class ScanManager(QtCore.QThread):
 		self.sequentialAcqList[0].forceSetExposure(self.scanSettings['sampleExp'])
 
 		# Pause all processors and clear any data 
-		for devProcessor in self.sequentialProcessingList:
+		for devProcessor in self.sequentialProcessingList + self.partialProcessingList:
 			while devProcessor.isIdle == False:
 				time.sleep(0.1)
 			devProcessor.enqueueData = True
@@ -112,7 +118,7 @@ class ScanManager(QtCore.QThread):
 		# Send signal to clear GUI plots
 		self.clearGUISig.emit()
 
-		for dev in self.sequentialAcqList:
+		for dev in self.sequentialAcqList + self.partialAcqList:
 			dev.unpause()
 
 		frames = self.scanSettings['frames']
@@ -132,7 +138,7 @@ class ScanManager(QtCore.QThread):
 						self.motor.moveAbs('x', motorCoords[0,0])
 						self.motor.moveAbs('y', motorCoords[0,1])
 						self.motor.moveAbs('z', motorCoords[0,2])
-						for (dev, devProcessor) in zip(self.sequentialAcqList, self.sequentialProcessingList):
+						for (dev, devProcessor) in zip(self.sequentialAcqList + self.partialAcqList, self.sequentialProcessingList + self.partialProcessingList):
 							devProcessor.enqueueData = False
 							dev.runMode = 0
 						# Send signal to clear GUI plots
@@ -173,10 +179,10 @@ class ScanManager(QtCore.QThread):
 							time.sleep(0.01)
 							calFreqRead[i*frames[1] + j, idx] = self.synth.getFreq()
 							# Signal all devices to start new acquisition
-							for dev in self.sequentialAcqList:
+							for dev in self.sequentialAcqList + self.partialAcqList:
 								dev.continueEvent.set()
 							# synchronization... wait for all the device threads to complete
-							for dev in self.sequentialAcqList:
+							for dev in self.sequentialAcqList + self.partialAcqList:
 								dev.completeEvent.wait()
 								dev.completeEvent.clear()
 						# return to sample arm
@@ -203,14 +209,13 @@ class ScanManager(QtCore.QThread):
 		self.motorPosUpdateSig.emit(motorPos)
 
 		# Wait for all processing threads to complete
-		for devProcessor in self.sequentialProcessingList:
+		for devProcessor in self.sequentialProcessingList + self.partialProcessingList:
 			while devProcessor.isIdle == False:
 				time.sleep(0.1)
 
-		print('calFreqRead =', calFreqRead)
 		# Process Data
+		startTime = timer()
 		calFrames = calFreq.shape[0]
-		#BS = np.random.random()*(self.colormapHigh - self.colormapLow) + self.colormapLow
 		dataset = {'Andor': [], 'Mako': [], 'TempSensor': []}
 		for (dev, devProcessor) in zip(self.sequentialAcqList, self.sequentialProcessingList):
 			while devProcessor.processedData.qsize() > frames[0]*frames[1]*frames[2] + calFrames*frames[0]*frames[1]:
@@ -218,101 +223,71 @@ class ScanManager(QtCore.QThread):
 			while not devProcessor.processedData.empty():
 				data = devProcessor.processedData.get()	# data[0] is a counter
 				dataset[dev.deviceName].append(data[1])
+		for (dev, devProcessor) in zip(self.partialAcqList, self.partialProcessingList):
+			while devProcessor.processedData.qsize() > calFrames*frames[0]*frames[1]:
+				devProcessor.processedData.get() # pop out the first few sets of data stored before scan started
+			while not devProcessor.processedData.empty():
+				data = devProcessor.processedData.get()	# data[0] is a counter
+				dataset[dev.deviceName].append(data[1])
+		endTime = timer()
+		print("[ScanManager] dataset processing time = %.3f s" % (endTime - startTime))
 
-		# Create data arrays
-		RawTempList = np.array(dataset['TempSensor'])
-		CalTempList = np.copy(RawTempList)
-		imageList = [d[0] for d in dataset['Mako']]
-		CMOSImage = np.array(imageList)
-		specImageList = [d[0] for d in dataset['Andor']]
-		AndorImage = np.array(specImageList)
-		CalImage = np.copy(AndorImage)
-		maxRowList = [d[1] for d in dataset['Andor']]
-		RawSpecList = np.array(maxRowList)
-		CalSpecList = np.copy(RawSpecList)
-		dispImageList = [d[2] for d in dataset['Andor']]
-		AndorDisplay = np.array(dispImageList)
-		laserPos = np.array([np.float(self.scanSettings['laserX']),np.float(self.scanSettings['laserY'])])
-
-		# Separate sample and reference frames
-		for i in range(calFrames,0,-1):
-			RawTempList = np.delete(RawTempList, np.s_[frames[0]::frames[0]+i], 0)
-			AndorImage = np.delete(AndorImage, np.s_[frames[0]::frames[0]+i], 0)
-			RawSpecList = np.delete(RawSpecList, np.s_[frames[0]::frames[0]+i], 0)
-			CMOSImage = np.delete(CMOSImage, np.s_[frames[0]::frames[0]+i], 0)
-		for i in range(frames[0],0,-1):
-			CalTempList = np.delete(CalTempList, np.s_[::i+calFrames], 0)
-			CalImage = np.delete(CalImage, np.s_[::i+calFrames], 0)
-			CalSpecList = np.delete(CalSpecList, np.s_[::i+calFrames], 0)
-
-		# Save data
+		# Make data arrays
+		startTime = timer()
 		# volumeScan.generateTestData(k)
 		volumeScan = ScanData(timestamp=datetime.now().strftime('%H:%M:%S'))
 		volumeScan.CalFreq = calFreqRead
-		volumeScan.RawTempList = RawTempList
-		volumeScan.CalTempList = CalTempList
-		volumeScan.AndorImage = AndorImage
-		volumeScan.CalImage = CalImage
+		volumeScan.TempList = np.array(dataset['TempSensor'])
+		volumeScan.AndorImage = np.array([d[0] for d in dataset['Andor']])
+		CMOSImage = np.array(dataset['Mako'])
+		print('CMOSImage.shape (1) =', CMOSImage.shape)
+		volumeScan.SpecList = np.array([d[1] for d in dataset['Andor']])
+		calPeakDist = np.array([d[2] for d in dataset['Andor']])
+		endTime = timer()
+		print("[ScanManager] make data arrays processing time = %.3f s" % (endTime - startTime))
+		# Free up memory used by dataset
+		del dataset
+		startTime = timer()
+		# Separate sample and reference frames
+		for i in range(frames[0],0,-1):
+			calPeakDist = np.delete(calPeakDist, np.s_[::i+calFrames], 0)
+			#CMOSImage = np.delete(CMOSImage, np.s_[::i+calFrames], 0)
+		endTime = timer()
+		print("[ScanManager] delete unneeded frames processing time = %.3f s" % (endTime - startTime))
+		startTime = timer()
+		# Save one CMOS image per calibration step (the 2nd one)
+		print('CMOSImage.shape (2) =', CMOSImage.shape)
+		CMOSImage = CMOSImage[1::calFrames]
+		print('CMOSImage.shape (3) =', CMOSImage.shape)
+		endTime = timer()
+		print("[ScanManager] choose 2nd frames processing time = %.3f s" % (endTime - startTime))
 		volumeScan.CMOSImage = CMOSImage
-		volumeScan.RawSpecList = RawSpecList
-		volumeScan.CalSpecList = CalSpecList
-		volumeScan.AndorDisplay = AndorDisplay
-		volumeScan.LaserPos = laserPos
 		volumeScan.MotorCoords = motorCoords
 		volumeScan.Screenshot = self.scanSettings['screenshot']
 		volumeScan.flattenedParamList = self.scanSettings['flattenedParamList']	#save all GUI paramaters
 
-		#### Fitting Brillouin spectra
-		startTime = timer()
-		freqList = np.zeros(RawSpecList.shape[0])
-		signal = np.zeros(RawSpecList.shape[0])
-		fittedSpect = np.empty(RawSpecList.shape)
 		# Find SD / FSR for every (y, z) coordinate
 		SDcal = np.empty([frames[1]*frames[2]])
 		FSRcal = np.empty([frames[1]*frames[2]])
 		for i in range(frames[1]*frames[2]):
-			pxDist = np.empty(calFreq.shape)
-			for j in range(calFrames):
-				interPeakDist, fittedCalSpect = DataFitting.fitSpectrum(np.copy(CalSpecList[i*calFrames+j]),1e-6,1e-6)
-				if len(interPeakDist)>1:
-					pxDist[j] = interPeakDist[1]
-				else:
-					print("[ScanManager/run] Calibration #%d failed." %j)
-					pxDist[j] = np.nan
 			try:
-				SDcal[i], FSRcal[i] = DataFitting.fitCalCurve(np.copy(pxDist), np.copy(calFreqRead[i]), 1e-6, 1e-6)
+				SDcal[i], FSRcal[i] = DataFitting.fitCalCurve(np.copy(calPeakDist[i*calFrames:(i+1)*calFrames]), np.copy(calFreqRead[i]), 1e-4, 1e-4)
 				print('Fitted SD =', SDcal[i])
 				print('Fitted FSR =', FSRcal[i])
 			except:
 				SDcal[i] = np.nan
 				FSRcal[i] = np.nan
 
-			for j in range(frames[0]):
-				sline = np.copy(RawSpecList[i*frames[0]+j])
-				sline = np.transpose(sline)
-				interPeakDist, fittedSpect[i*frames[0]+j] = DataFitting.fitSpectrum(sline,1e-6,1e-6)
-				if len(interPeakDist)==2:
-					freqList[i*frames[0]+j] = 0.5*(FSRcal[i] - SDcal[i]*interPeakDist[1])
-					signal[i*frames[0]+j] = interPeakDist[0]
-				else:
-					freqList[i*frames[0]+j] = np.nan
-					signal[i*frames[0]+j] = np.nan
-		# Saved fitted data
+		# Saved fitted SD/FSR
 		volumeScan.SD = SDcal
 		volumeScan.FSR = FSRcal
-		volumeScan.BSList = freqList
-		volumeScan.FitSpecList = fittedSpect
-
-		endTime = timer()
-		print("[ScanManager] Fitting time = %.3f s" % (endTime - startTime))
-		print('Brillouin frequency shift list:', freqList)
 
 		self.sessionData.experimentList[self.saveExpIndex].addScan(volumeScan)
 		scanIdx = self.sessionData.experimentList[self.saveExpIndex].size() - 1
 		self.sessionData.saveToFile([(self.saveExpIndex,[scanIdx])])
 
 		# finally return to free running settings before the scan started
-		for (dev, devProcessor) in zip(self.sequentialAcqList, self.sequentialProcessingList):
+		for (dev, devProcessor) in zip(self.sequentialAcqList + self.partialAcqList, self.sequentialProcessingList + self.partialProcessingList):
 			devProcessor.enqueueData = False
 			dev.runMode = 0
 

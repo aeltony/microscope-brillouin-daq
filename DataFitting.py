@@ -40,7 +40,7 @@ def fitSpectrum(sline, xtol=1e-6, ftol=1e-6, maxfev=500):
 	# Check for no peaks:
 	if len(pk_ind)<1:
 		#print('[AndorDevice] Too few peaks in spectrum')
-		interPeaksteps = np.array([])
+		interPeaksteps = np.nan
 		fittedSpect = np.nan*np.ones(sline.shape)
 		return (interPeaksteps, fittedSpect)
 
@@ -69,13 +69,13 @@ def fitSpectrum(sline, xtol=1e-6, ftol=1e-6, maxfev=500):
 		#print('Spectrum fitting time =', (end-start)*1e3, 'ms')
 		#print('R^2 =', r_squared)
 		#perr = np.sqrt(np.diag(pcov))
-		interPeaksteps = np.zeros(2)
-		interPeaksteps[0] = np.array([np.average(pk_info['peak_heights'])])
-		interPeaksteps[1] = np.abs(popt[4] - popt[1])
+		#interPeaksteps = np.zeros(2)
+		#interPeaksteps[0] = np.array([np.average(pk_info['peak_heights'])])
+		interPeaksteps = np.abs(popt[4] - popt[1])
 		fittedSpect = _2Lorentzian(pix, popt[0], popt[1], popt[2], popt[3], popt[4], popt[5], popt[6])
 	except:
 		#print('[AndorDevice] Fitting spectrum failed')
-		interPeaksteps = np.array([])
+		interPeaksteps = np.nan
 		fittedSpect = np.nan*np.ones(sline.shape)
 
 	return (interPeaksteps, fittedSpect)

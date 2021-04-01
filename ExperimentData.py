@@ -261,21 +261,14 @@ class ScanData:
 	# Ensure these variables are assigned
 	savedDataset = ['ScanData',
 				 'CalFreq',
-				 'RawTempList',
-				 'CalTempList',
+				 'TempList',
 				 'AndorImage',
-				 'CalImage',
 				 'CMOSImage',
-				 'RawSpecList',
-				 'CalSpecList',
-				 'AndorDisplay',
-				 'LaserPos',
+				 'SpecList',
 				 'MotorCoords',
 				 'Screenshot',
 				 'SD',
-				 'FSR',
-				 'BSList',
-				 'FitSpecList']
+				 'FSR']
 
 	# scanAttribuets and scanSettings are dictionaries
 	# parent is the containing Experiment

@@ -97,7 +97,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
                 {'name': 'Jog X', 'type': 'action3', 'ButtonText':('Jog X +', 'Jog X -', 'Home X')},
                 {'name': 'Jog Y', 'type': 'action3', 'ButtonText':('Jog Y +', 'Jog Y -', 'Home Y')},
                 {'name': 'Jog Z', 'type': 'action3', 'ButtonText':('Jog Z +', 'Jog Z -', 'Home Z')},
-                {'name': 'Move to location', 'type': 'float', 'value':0, 'suffix':' um', 'limits':(0, 5000), 'decimals':5},
+                {'name': 'Move to location', 'type': 'float', 'value':0, 'suffix':' um', 'limits':(0, 100000), 'decimals':5},
                 {'name': 'Move', 'type':'action3', 'ButtonText':('Move X', 'Move Y', 'Move Z')}
             ]},
             {'name': 'Microwave Source', 'type': 'group', 'children': [
@@ -105,7 +105,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
                 {'name': 'RF Power', 'type': 'float', 'value': 1.0, 'suffix':' dBm', 'step': 0.5, 'limits': (-20, 10), 'decimals':1},
                 {'name': 'Cal. Freq (min.)', 'type': 'float', 'value': 5.58, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
                 {'name': 'Cal. Freq (max.)', 'type': 'float', 'value': 5.82, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
-                {'name': 'Cal. Freq (step)', 'type': 'float', 'value': 0.01, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3}
+                {'name': 'Cal. Freq (step)', 'type': 'float', 'value': 0.08, 'suffix':' GHz', 'step': 0.001, 'limits': (0.001, 13.0), 'decimals':3}
             ]},
             {'name': 'Spectrometer Camera', 'type': 'group', 'children': [
                 {'name': 'Background Subtraction', 'type':'toggle', 'ButtonText':('Turn on background subtraction', 'Turn off background subtraction')},
@@ -296,8 +296,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
         self.BrillouinScan = ScanManager(self.stop_event, self.ZaberDevice, self.ShutterDevice, self.SynthDevice)
         self.BrillouinScan.addToSequentialList(self.AndorDeviceThread, self.AndorProcessThread)
-        self.BrillouinScan.addToSequentialList(self.MakoDeviceThread, self.MakoProcessThread)
-        self.BrillouinScan.addToSequentialList(self.TempSensorDeviceThread, self.TempSensorProcessThread)
+        self.BrillouinScan.addToPartialList(self.MakoDeviceThread, self.MakoProcessThread)
+        self.BrillouinScan.addToPartialList(self.TempSensorDeviceThread, self.TempSensorProcessThread)
         self.BrillouinScan.finished.connect(self.onFinishScan)
         self.BrillouinScan.clearGUISig.connect(self.clearGUIElements)
 
@@ -492,11 +492,12 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         # Scale plot window to scan length (+ calFreq calibration frames per y-z coordinate)
         self.calPoints = calFreq.shape[0]
         self.maxScanPoints = frameNumArr[0]*frameNumArr[1]*frameNumArr[2] + self.calPoints*frameNumArr[1]*frameNumArr[2]
-        self.sampleSpecSeriesSize = self.maxScanPoints # Prevent indexing error before scan starts
         self.maxRowPoints = frameNumArr[0] + self.calPoints
         self.maxColPoints = frameNumArr[1]
         self.heatmapPlot.setXRange(0, self.maxRowPoints)
         self.heatmapPlot.setYRange(0, self.maxColPoints)
+        self.sampleSpecSeriesData = np.zeros((self.maxScanPoints, 210))
+        self.sampleSpecSeriesSize = 0
 
         self.BrillouinScan.saveScan = True
         self.BrillouinScan.sessionData = self.session
@@ -516,6 +517,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
     def onFinishScan(self):
         self.maxScanPoints = 400 # Re-scale plot window for free-running mode
+        self.sampleSpecSeriesData = np.zeros((self.maxScanPoints, 210))
+        self.sampleSpecSeriesSize = 0
         self.maxRowPoints = 20
         self.maxColPoints = 20
         self.calPoints = 0
@@ -584,8 +587,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         # print("[UpdateBrillouinSeqPlot]")
         SD = self.allParameters.child('Scan').child('SD').value()
         FSR = self.allParameters.child('Scan').child('FSR').value()
-        if len(interPeakDist)>1:
-            newData = [0.5*(FSR - SD*interPeakDist[1])]
+        if ~np.isnan(interPeakDist):
+            newData = [0.5*(FSR - SD*interPeakDist)]
             newData2 = newData
         else:
             newData = [np.nan]
@@ -619,7 +622,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
     # Plot fitted Brillouin spectrum
     # curvedata is a tuple of (raw spectrum, fitted spectrum)
-    def UpdateSampleSpectrum(self,curveData):
+    def UpdateSampleSpectrum(self, curveData):
         # print("[UpdateSpectrum]")
         rawSpect = curveData[0]
         fitSpect = curveData[1]
@@ -636,6 +639,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             print('[UpdateSpectrum] Resizing spectrograph')
             self.sampleSpecSeriesData = np.zeros((self.maxScanPoints, len(rawSpect)))
             self.sampleSpecSeriesSize = 0
+
         #print('self.sampleSpecSeriesSize=', self.sampleSpecSeriesSize)
         #print('self.maxScanPoints=', self.maxScanPoints)
         if self.sampleSpecSeriesSize < self.maxScanPoints:
