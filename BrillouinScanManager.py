@@ -147,7 +147,6 @@ class ScanManager(QtCore.QThread):
 						# Send motor position signal to update GUI
 						motorPos = self.motor.updatePosition()
 						self.motorPosUpdateSig.emit(motorPos)
-						self.Cancel_Flag = False
 						return
 					# Signal all devices to start new acquisition
 					for dev in self.sequentialAcqList:
@@ -240,7 +239,6 @@ class ScanManager(QtCore.QThread):
 		volumeScan.TempList = np.array(dataset['TempSensor'])
 		volumeScan.AndorImage = np.array([d[0] for d in dataset['Andor']])
 		CMOSImage = np.array(dataset['Mako'])
-		print('CMOSImage.shape (1) =', CMOSImage.shape)
 		volumeScan.SpecList = np.array([d[1] for d in dataset['Andor']])
 		calPeakDist = np.array([d[2] for d in dataset['Andor']])
 		endTime = timer()
@@ -256,9 +254,7 @@ class ScanManager(QtCore.QThread):
 		print("[ScanManager] delete unneeded frames processing time = %.3f s" % (endTime - startTime))
 		startTime = timer()
 		# Save one CMOS image per calibration step (the 2nd one)
-		print('CMOSImage.shape (2) =', CMOSImage.shape)
 		CMOSImage = CMOSImage[1::calFrames]
-		print('CMOSImage.shape (3) =', CMOSImage.shape)
 		endTime = timer()
 		print("[ScanManager] choose 2nd frames processing time = %.3f s" % (endTime - startTime))
 		volumeScan.CMOSImage = CMOSImage

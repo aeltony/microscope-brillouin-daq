@@ -512,7 +512,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.BrillouinScan.start()
 
     def cancelScan(self):
-        print('Cancel Flag set!')
+        print('Scan cancelled!')
         self.BrillouinScan.Cancel_Flag = True
 
     def onFinishScan(self):
@@ -529,14 +529,15 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             self.ShutterDevice.setShutterState(self.ShutterDevice.REFERENCE_STATE)
         else:
             self.ShutterDevice.setShutterState(self.ShutterDevice.SAMPLE_STATE)
-        currExp = self.session.experimentList[self.BrillouinScan.saveExpIndex]
-        currScanIdx = self.session.experimentList[self.BrillouinScan.saveExpIndex].size() - 1
-        SD = currExp.getSD(currScanIdx)
-        if ~np.isnan(SD):
-            self.allParameters.child('Scan').child('SD').setValue(SD)
-        FSR = currExp.getFSR(currScanIdx)
-        if ~np.isnan(FSR):
-            self.allParameters.child('Scan').child('FSR').setValue(FSR)
+        if self.BrillouinScan.Cancel_Flag == False:
+            currExp = self.session.experimentList[self.BrillouinScan.saveExpIndex]
+            currScanIdx = self.session.experimentList[self.BrillouinScan.saveExpIndex].size() - 1
+            SD = currExp.getSD(currScanIdx)
+            FSR = currExp.getFSR(currScanIdx)
+            if ~np.isnan(SD):
+                self.allParameters.child('Scan').child('SD').setValue(SD)
+            if ~np.isnan(FSR):
+                self.allParameters.child('Scan').child('FSR').setValue(FSR)
         self.BrillouinScan.motorPosUpdateSig.disconnect(self.MotorPositionUpdate2)
         self.hardwareGetTimer.start(10000)
         self.motorPositionTimer.start(500)
@@ -682,6 +683,12 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         else:
             return
 
+        #if self.session is not None:
+        #    self.session.clearExperiments()
+        #    self.session = None
+        #    self.model.clearTree()
+        #self.treeView.setEnabled(False)
+
         self.dataFileName = filename
         self.sessionName.setText(filename)
 
@@ -757,6 +764,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
 
     def treeSelectionChanged(self, selected, deselected):
+        #print('selected =', selected)
+        #print('selected.indexes() =', selected.indexes())
         idx = selected.indexes()[0]
         item = self.model.itemFromIndex(idx)
         if item.parent() is None:

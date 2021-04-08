@@ -47,7 +47,7 @@ class ShutterDevice:
 		if error != 0:
 			print('[ShutterDevice] Error', ERROR_CODE[error])
 		self.state = state
-		print("[ShutterDevice] (ObjShutter, RefShutter) = (%d, %d)" % (state[0], state[1]))
+		#print("[ShutterDevice] (ObjShutter, RefShutter) = (%d, %d)" % (state[0], state[1]))
 
 	def getShutterState(self):
 		objState = c_int()

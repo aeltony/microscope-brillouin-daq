@@ -57,6 +57,9 @@ class BrillouinTreeModel(QtGui.QStandardItemModel):
 				self.session.saveToFile(updateFieldOnly=True, fieldPath=deletedField)
 				self.activeExperimentSig.emit(self.activeExperiment)
 
+	def clearTree(self):
+		self.removeRows(1, self.rowCount())
+		#self.clear()
 
 	def deleteScan(self, item):
 		# Set foreground color to red

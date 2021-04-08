@@ -78,6 +78,9 @@ class SessionData(QtCore.QObject):
 		elif self.filename is not None:
 			self.saveToFile( [(newExp.index,[])] )
 
+	def clearExperiments(self):
+		self.experimentList = []
+
 	def getNote(self):
 		return self.note
 
