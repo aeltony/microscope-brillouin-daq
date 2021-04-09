@@ -117,7 +117,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
                 {'name': 'Camera Temp.', 'type': 'float', 'value':0, 'suffix':' C', 'readonly': True}
             ]},        
             {'name': 'Microscope Camera', 'type': 'group', 'children': [
-                {'name': 'Exposure Time', 'type': 'float', 'value': 200, 'suffix':' ms', 'limits':(0.001, 10000)},
+                {'name': 'Exposure Time', 'type': 'float', 'value': 20, 'suffix':' ms', 'limits':(0.001, 10000)},
                 {'name': 'Frame Rate', 'type': 'int', 'value': 5, 'suffix':' Hz', 'limits':(1, 20)}
             ]}
         ]

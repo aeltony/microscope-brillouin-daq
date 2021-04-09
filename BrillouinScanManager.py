@@ -84,10 +84,10 @@ class ScanManager(QtCore.QThread):
 		# make sure saving settings are ok
 		if self.saveScan:
 			if self.sessionData is None:
-				print("No Session provided to save data in; set ScanManager.sessionData first")
+				print("[ScanManager] No Session provided to save data in; set ScanManager.sessionData first")
 				return
 			if self.saveExpIndex == -1:
-				print("Save parameter is empty; set ScanManager.saveParameter first")
+				print("[ScanManager] Save parameter is empty; set ScanManager.saveParameter first")
 				return
 
 		# Switch to sample arm
@@ -213,7 +213,7 @@ class ScanManager(QtCore.QThread):
 				time.sleep(0.1)
 
 		# Process Data
-		startTime = timer()
+		#startTime = timer()
 		calFrames = calFreq.shape[0]
 		dataset = {'Andor': [], 'Mako': [], 'TempSensor': []}
 		for (dev, devProcessor) in zip(self.sequentialAcqList, self.sequentialProcessingList):
@@ -229,10 +229,10 @@ class ScanManager(QtCore.QThread):
 				data = devProcessor.processedData.get()	# data[0] is a counter
 				dataset[dev.deviceName].append(data[1])
 		endTime = timer()
-		print("[ScanManager] dataset processing time = %.3f s" % (endTime - startTime))
+		#print("[ScanManager] dataset processing time = %.3f s" % (endTime - startTime))
 
 		# Make data arrays
-		startTime = timer()
+		#startTime = timer()
 		# volumeScan.generateTestData(k)
 		volumeScan = ScanData(timestamp=datetime.now().strftime('%H:%M:%S'))
 		volumeScan.CalFreq = calFreqRead
@@ -242,38 +242,34 @@ class ScanManager(QtCore.QThread):
 		volumeScan.SpecList = np.array([d[1] for d in dataset['Andor']])
 		calPeakDist = np.array([d[2] for d in dataset['Andor']])
 		endTime = timer()
-		print("[ScanManager] make data arrays processing time = %.3f s" % (endTime - startTime))
+		#print("[ScanManager] make data arrays processing time = %.3f s" % (endTime - startTime))
 		# Free up memory used by dataset
 		del dataset
-		startTime = timer()
+		#startTime = timer()
 		# Separate sample and reference frames
 		for i in range(frames[0],0,-1):
 			calPeakDist = np.delete(calPeakDist, np.s_[::i+calFrames], 0)
-			#CMOSImage = np.delete(CMOSImage, np.s_[::i+calFrames], 0)
 		endTime = timer()
-		print("[ScanManager] delete unneeded frames processing time = %.3f s" % (endTime - startTime))
-		startTime = timer()
+		#print("[ScanManager] delete unneeded frames processing time = %.3f s" % (endTime - startTime))
+		#startTime = timer()
 		# Save one CMOS image per calibration step (the 2nd one)
 		CMOSImage = CMOSImage[1::calFrames]
 		endTime = timer()
-		print("[ScanManager] choose 2nd frames processing time = %.3f s" % (endTime - startTime))
+		#print("[ScanManager] choose 2nd frames processing time = %.3f s" % (endTime - startTime))
 		volumeScan.CMOSImage = CMOSImage
 		volumeScan.MotorCoords = motorCoords
 		volumeScan.Screenshot = self.scanSettings['screenshot']
 		volumeScan.flattenedParamList = self.scanSettings['flattenedParamList']	#save all GUI paramaters
 
-		# Find SD / FSR for every (y, z) coordinate
-		SDcal = np.empty([frames[1]*frames[2]])
-		FSRcal = np.empty([frames[1]*frames[2]])
-		for i in range(frames[1]*frames[2]):
-			try:
-				SDcal[i], FSRcal[i] = DataFitting.fitCalCurve(np.copy(calPeakDist[i*calFrames:(i+1)*calFrames]), np.copy(calFreqRead[i]), 1e-4, 1e-4)
-				print('Fitted SD =', SDcal[i])
-				print('Fitted FSR =', FSRcal[i])
-			except:
-				SDcal[i] = np.nan
-				FSRcal[i] = np.nan
-
+		# Find SD / FSR of final calibration curve
+		idx = frames[1]*frames[2]-1
+		try:
+			SDcal, FSRcal = DataFitting.fitCalCurve(np.copy(calPeakDist[idx*calFrames:(idx+1)*calFrames]), np.copy(calFreqRead[idx]), 1e-6, 1e-6)
+			print('[ScanManager] Fitted SD =', SDcal)
+			print('[ScanManager] Fitted FSR =', FSRcal)
+		except:
+			SDcal = np.nan
+			FSRcal = np.nan
 		# Saved fitted SD/FSR
 		volumeScan.SD = SDcal
 		volumeScan.FSR = FSRcal

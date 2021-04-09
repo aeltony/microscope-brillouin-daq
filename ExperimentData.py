@@ -104,7 +104,7 @@ class SessionData(QtCore.QObject):
 			print("[SessionData/saveToFile] filename not provided")
 			return
 		# print filename
-		print("Session File Save: " + filename)
+		print("[SessionData/saveToFile] Session File Save: " + filename)
 		with h5py.File(filename, 'a') as fHandle:
 			if updateFieldOnly:	#TODO: throw errors when the field path is invalid
 				pathElements = fieldPath.split('/')
@@ -179,12 +179,12 @@ class ExperimentData:
 
 	def getSD(self, scanIdx):
 		scan = self.scanList[scanIdx]
-		SD = np.nanmean(scan.SD)
+		SD = scan.SD
 		return SD
 
 	def getFSR(self, scanIdx):
 		scan = self.scanList[scanIdx]
-		FSR = np.nanmean(scan.FSR)
+		FSR = scan.FSR
 		return FSR
 
 	# get indices of not deleted scans

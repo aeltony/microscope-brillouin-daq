@@ -48,7 +48,7 @@ class MakoDevice(Devices.BrillouinDevice.Device):
             self.camera.OffsetX.SetValue(int(0.5*(3208 - self.imageWidth)))
             self.camera.OffsetY.SetValue(int(0.5*(2200 - self.imageHeight)))
             self.camera.ExposureAuto.SetValue(PySpin.ExposureAuto_Off)
-            self.camera.ExposureTime.SetValue(200000) # us
+            self.camera.ExposureTime.SetValue(20000) # us
             self.camera.GainAuto.SetValue(PySpin.GainAuto_Off)
             self.camera.Gain.SetValue(0) # dB
             self.camera.AcquisitionFrameRateEnable.SetValue(True)

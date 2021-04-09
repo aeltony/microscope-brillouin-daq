@@ -39,7 +39,7 @@ def fitSpectrum(sline, xtol=1e-6, ftol=1e-6, maxfev=500):
 
 	# Check for no peaks:
 	if len(pk_ind)<1:
-		#print('[AndorDevice] Too few peaks in spectrum')
+		#print('[DataFitting] Too few peaks in spectrum')
 		interPeaksteps = np.nan
 		fittedSpect = np.nan*np.ones(sline.shape)
 		return (interPeaksteps, fittedSpect)
@@ -74,7 +74,7 @@ def fitSpectrum(sline, xtol=1e-6, ftol=1e-6, maxfev=500):
 		interPeaksteps = np.abs(popt[4] - popt[1])
 		fittedSpect = _2Lorentzian(pix, popt[0], popt[1], popt[2], popt[3], popt[4], popt[5], popt[6])
 	except:
-		#print('[AndorDevice] Fitting spectrum failed')
+		#print('[DataFitting] Fitting spectrum failed')
 		interPeaksteps = np.nan
 		fittedSpect = np.nan*np.ones(sline.shape)
 
@@ -92,8 +92,8 @@ def fitCalCurve(pxDist, freq, xtol=1e-6, ftol=1e-6, maxfev=500):
 		ss_res = np.sum(residuals**2)
 		ss_tot = np.sum((freq-np.mean(freq))**2)
 		r_squared = 1 - (ss_res / ss_tot)
-		print('Calibration curve fitting time =', (end-start)*1e3, 'ms')
-		print('R^2 =', r_squared)
+		print('[DataFitting] Calibration curve fitting time =', (end-start)*1e3, 'ms')
+		print('[DataFitting] R^2 =', r_squared)
 		#perr = np.sqrt(np.diag(pcov))
 		SD = popt[0]
 		FSR = popt[1]
