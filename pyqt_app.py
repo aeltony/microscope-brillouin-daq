@@ -68,9 +68,9 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.params = [
             {'name': 'Scan', 'type': 'group', 'children': [
                 {'name': 'Step Size', 'type': 'group', 'children': [
-                    {'name': 'X', 'type': 'float', 'value': 50, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5},
-                    {'name': 'Y', 'type': 'float', 'value': 50, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5},
-                    {'name': 'Z', 'type': 'float', 'value': 50, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5}]},
+                    {'name': 'X', 'type': 'float', 'value': 1, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5},
+                    {'name': 'Y', 'type': 'float', 'value': 1, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5},
+                    {'name': 'Z', 'type': 'float', 'value': 1, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5}]},
                 {'name': 'Frame Number', 'type': 'group', 'children': [
                     {'name': 'X', 'type': 'int', 'value': 5, 'step': 1, 'limits':(1,2000)},
                     {'name': 'Y', 'type': 'int', 'value': 5, 'step': 1, 'limits':(1,2000)},
@@ -491,7 +491,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.BrillouinScan.assignScanSettings(scanSettings)
         # Scale plot window to scan length (+ calFreq calibration frames per y-z coordinate)
         self.calPoints = calFreq.shape[0]
-        self.maxScanPoints = frameNumArr[0]*frameNumArr[1]*frameNumArr[2] + self.calPoints*frameNumArr[1]*frameNumArr[2]
+        self.maxScanPoints = frameNumArr[0] + self.calPoints
         self.maxRowPoints = frameNumArr[0] + self.calPoints
         self.maxColPoints = frameNumArr[1]
         self.heatmapPlot.setXRange(0, self.maxRowPoints)
@@ -610,9 +610,12 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
         # Update Brillouin vs. time plot
         if len(newData)+len(self.sampleScanDepthData) > self.maxScanPoints:
-            t = self.maxScanPoints - len(newData) - len(self.sampleScanDepthData)
-            self.sampleScanDepthData = np.roll(self.sampleScanDepthData, t)
-            self.sampleScanDepthData[self.maxScanPoints - len(newData):] = newData
+            if self.calPoints > 0:
+                self.sampleScanDepthData = np.array([])
+            else:
+                t = self.maxScanPoints - len(newData) - len(self.sampleScanDepthData)
+                self.sampleScanDepthData = np.roll(self.sampleScanDepthData, t)
+                self.sampleScanDepthData[self.maxScanPoints - len(newData):] = newData
         else:
             self.sampleScanDepthData = np.append(self.sampleScanDepthData, newData)
 
@@ -647,8 +650,12 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             self.sampleSpecSeriesData[self.sampleSpecSeriesSize,:] = rawSpect
             self.sampleSpecSeriesSize += 1
         else:
-            self.sampleSpecSeriesData = np.roll(self.sampleSpecSeriesData, -1, axis=0)
-            self.sampleSpecSeriesData[-1, :] = rawSpect
+            if self.calPoints > 0:
+                self.sampleSpecSeriesData = np.zeros((self.maxScanPoints, len(rawSpect)))
+                self.sampleSpecSeriesSize = 0
+            else:
+                self.sampleSpecSeriesData = np.roll(self.sampleSpecSeriesData, -1, axis=0)
+                self.sampleSpecSeriesData[-1, :] = rawSpect
 
         maximum = self.sampleSpecSeriesData.max()
         sampleSpecSeriesDataScaled = self.sampleSpecSeriesData #* (255.0 / maximum)
