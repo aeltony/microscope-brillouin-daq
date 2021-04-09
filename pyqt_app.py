@@ -59,11 +59,13 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.maxRowPoints = 20 # Number of pixels per row in freerunning Brillouin map
         self.maxColPoints = 20 # Number of pixels per column in freerunning Brillouin map
         self.calPoints = 0 # Number of calibration points (used when scanning)
-        laserX = self.configParser.getint('Scan', 'laser_position_X')
-        laserY = self.configParser.getint('Scan', 'laser_position_Y')
-        RFpower = self.configParser.getfloat('Synth', 'RFpower')
-        spectColumn = self.configParser.getint('Andor', 'spectColumn')
-        spectRow = self.configParser.getint('Andor', 'spectRow')
+        laserX = self.configParser.getint('Scan', 'laser_position_x')
+        laserY = self.configParser.getint('Scan', 'laser_position_y')
+        FSR = self.configParser.getfloat('Scan', 'FSR')
+        SD = self.configParser.getfloat('Scan', 'SD')
+        RFpower = self.configParser.getfloat('Synth', 'RF_power')
+        spectColumn = self.configParser.getint('Andor', 'spect_column')
+        spectRow = self.configParser.getint('Andor', 'spect_row')
 
         self.params = [
             {'name': 'Scan', 'type': 'group', 'children': [
@@ -76,8 +78,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
                     {'name': 'Y', 'type': 'int', 'value': 5, 'step': 1, 'limits':(1,2000)},
                     {'name': 'Z', 'type': 'int', 'value': 5, 'step': 1, 'limits':(1,2000)}]},
                 {'name': 'Ambient Temp.', 'type': 'float', 'value': 0.0, 'suffix':' deg. C', 'readonly':True, 'decimals':4},
-                {'name': 'FSR', 'type': 'float', 'value':21.5, 'suffix':' GHz', 'limits':(5, 100), 'decimals':5},
-                {'name': 'SD', 'type': 'float', 'value':0.127, 'suffix':' GHz/px', 'limits':(0, 2), 'decimals':4},
+                {'name': 'FSR', 'type': 'float', 'value': FSR, 'suffix':' GHz', 'limits':(5, 100), 'decimals':5},
+                {'name': 'SD', 'type': 'float', 'value': SD, 'suffix':' GHz/px', 'limits':(0, 2), 'decimals':4},
                 {'name': 'ToggleReference', 'type':'toggle', 'ButtonText':('Switch to Reference', 'Switch to Sample')},         #False=Sample="Switch to Ref"
                 {'name': 'Scan/Cancel', 'type': 'action2', 'ButtonText':('Scan', 'Cancel')},
                 {'name': 'More Settings', 'type': 'group', 'children': [
@@ -102,7 +104,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             ]},
             {'name': 'Microwave Source', 'type': 'group', 'children': [
                 {'name': 'RF Frequency', 'type': 'float', 'value': 5.75, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
-                {'name': 'RF Power', 'type': 'float', 'value': 1.0, 'suffix':' dBm', 'step': 0.5, 'limits': (-20, 10), 'decimals':1},
+                {'name': 'RF Power', 'type': 'float', 'value': RFpower, 'suffix':' dBm', 'step': 0.1, 'limits': (-20, 10), 'decimals':2},
                 {'name': 'Cal. Freq (min.)', 'type': 'float', 'value': 5.58, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
                 {'name': 'Cal. Freq (max.)', 'type': 'float', 'value': 5.82, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
                 {'name': 'Cal. Freq (step)', 'type': 'float', 'value': 0.08, 'suffix':' GHz', 'step': 0.001, 'limits': (0.001, 13.0), 'decimals':3}
@@ -124,17 +126,6 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         ## Create tree of Parameter objects
         self.allParameters = Parameter.create(name='params', type='group', children=self.params)
         self.parameterTreeWidget.setParameters(self.allParameters, showTop=False)
-
-        # Laser crosshair adjustment
-        self.allParameters.child('Scan').child('More Settings').child('Laser Focus X').sigValueChanging.connect(
-            self.CMOSvLineValueChange)
-        self.allParameters.child('Scan').child('More Settings').child('Laser Focus Y').sigValueChanging.connect(
-            self.CMOShLineValueChange)
-        # Spectrum Column / Row adjustment
-        self.allParameters.child('Spectrometer Camera').child('Spectrum Column').sigValueChanging.connect(
-            self.spectColumnValueChange)
-        self.allParameters.child('Spectrometer Camera').child('Spectrum Row').sigValueChanging.connect(
-            self.spectRowValueChange)
 
         self.model = BrillouinTreeModel()
 
@@ -301,33 +292,12 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.BrillouinScan.finished.connect(self.onFinishScan)
         self.BrillouinScan.clearGUISig.connect(self.clearGUIElements)
 
+        # Apply settings from config file
+        self.AndorDeviceThread.setTopPx(int(spectColumn))
+        self.AndorDeviceThread.setLeftPx(int(spectRow))
+        self.SynthDevice.setPower(RFpower)
+
         self.InitHardwareParameterTree()
-
-    def CMOShLineValueChange(self, param, value):
-        # print("[CMOShLineValueChange]")
-        self.CMOShLine.setPos(value)
-        self.configParser.set('Scan', 'laser_position_Y', str(int(value)))
-        with open(self.configFilename, 'w') as f:
-            self.configParser.write(f)
-
-    def CMOSvLineValueChange(self, param, value):
-        # print("[CMOSvLineValueChange]")
-        self.CMOSvLine.setPos(value)
-        self.configParser.set('Scan', 'laser_position_X', str(int(value)))
-        with open(self.configFilename, 'w') as f:
-            self.configParser.write(f)
-
-    def spectColumnValueChange(self, param, value):
-        self.AndorDeviceThread.setTopPx(int(value))
-        self.configParser.set('Andor', 'spectColumn', str(int(value)))
-        with open(self.configFilename, 'w') as f:
-            self.configParser.write(f)
-
-    def spectRowValueChange(self, param, value):
-        self.AndorDeviceThread.setLeftPx(int(value))
-        self.configParser.set('Andor', 'spectRow', str(int(value)))
-        with open(self.configFilename, 'w') as f:
-            self.configParser.write(f)
 
     #############################################################################################
     # This next group of methods are used to set/get hardware settings, using the parameterTree #
@@ -335,7 +305,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
     def InitHardwareParameterTree(self):
         # print("[InitHardwareParameterTree]")
 
-        # ========================= Spectrometer Camera ================================
+        # ========================= Spectrometer Camera =============================
         pItem = self.allParameters.child('Spectrometer Camera')
         pItem.child('Background Subtraction').sigActivated.connect(self.bgSubtraction)
         pItem.child('AutoExposure').sigActivated.connect(self.switchAutoExp)
@@ -343,8 +313,11 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             lambda data: self.changeHardwareSetting(data, self.AndorDeviceThread.setExposure))
         pItem.child('Exposure').setValue(self.AndorDeviceThread.getExposure())
         pItem.child('Camera Temp.').setValue(self.AndorDeviceThread.getTemperature())
+        # Spectrum Column / Row adjustment
+        pItem.child('Spectrum Column').sigValueChanging.connect(self.spectColumnValueChange)
+        pItem.child('Spectrum Row').sigValueChanging.connect(self.spectRowValueChange)
 
-        # ========================= Monitor Camera ================================
+        # ========================= Monitor Camera ==================================
         pItem = self.allParameters.child('Microscope Camera')
         pItem.child('Exposure Time').sigValueChanged.connect(
             lambda data: self.changeHardwareSetting(data, self.MakoDeviceThread.setExpTime))
@@ -356,11 +329,10 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         pItem.child('RF Frequency').sigValueChanged.connect(
             lambda data: self.changeHardwareSetting(data, self.SynthDevice.setFreq))
         pItem.child('RF Frequency').setValue(self.SynthDevice.getFreq())
-        pItem.child('RF Power').sigValueChanged.connect(
-            lambda data: self.changeHardwareSetting(data, self.SynthDevice.setPower))
+        pItem.child('RF Power').sigValueChanging.connect(self.synthPowerValueChange)
         pItem.child('RF Power').setValue(self.SynthDevice.getPower())
 
-        # ========================= Motor =================================
+        # ========================= Motor ===========================================
         pItem = self.allParameters.child('Motor')
         self.MotorPositionUpdate()
         
@@ -400,12 +372,20 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             'z', self.allParameters.child('Motor').child('Move to location').value())
         pItem.child('Move').sigActivated3.connect(motorMoveFunZ)
 
-        # ========================= Scan ===================
+        # ========================= Scan ===========================================
         pItem = self.allParameters.child('Scan')
         pItem.child('Scan/Cancel').sigActivated.connect(self.startScan)
         pItem.child('Scan/Cancel').sigActivated2.connect(self.cancelScan)
         pItem.child('ToggleReference').sigActivated.connect(self.toggleReference)
-        # ========================= Hardware monitor timers ===================
+        pItem.child('FSR').sigValueChanging.connect(self.FSRValueChange)
+        pItem.child('SD').sigValueChanging.connect(self.SDValueChange)
+        # Laser crosshair adjustment
+        pItem.child('More Settings').child('Laser Focus X').sigValueChanging.connect(
+            self.CMOSvLineValueChange)
+        pItem.child('More Settings').child('Laser Focus Y').sigValueChanging.connect(
+            self.CMOShLineValueChange)
+
+        # ========================= Hardware monitor timers ========================
 
         self.hardwareGetTimer = QTimer()
         self.hardwareGetTimer.timeout.connect(self.HardwareParamUpdate)
@@ -441,6 +421,48 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.allParameters.child('Motor').child('Current X location').setValue(pos[0])
         self.allParameters.child('Motor').child('Current Y location').setValue(pos[1])
         self.allParameters.child('Motor').child('Current Z location').setValue(pos[2])
+
+    def CMOShLineValueChange(self, param, value):
+        # print("[CMOShLineValueChange]")
+        self.CMOShLine.setPos(value)
+        self.configParser.set('Scan', 'laser_position_y', str(int(value)))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
+
+    def CMOSvLineValueChange(self, param, value):
+        # print("[CMOSvLineValueChange]")
+        self.CMOSvLine.setPos(value)
+        self.configParser.set('Scan', 'laser_position_x', str(int(value)))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
+
+    def synthPowerValueChange(self, param, value):
+        self.SynthDevice.setPower(value)
+        self.configParser.set('Synth', 'RF_power', str(value))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
+
+    def FSRValueChange(self, param, value):
+        self.configParser.set('Scan', 'FSR', str(value))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
+
+    def SDValueChange(self, param, value):
+        self.configParser.set('Scan', 'SD', str(value))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
+
+    def spectColumnValueChange(self, param, value):
+        self.AndorDeviceThread.setTopPx(int(value))
+        self.configParser.set('Andor', 'spect_column', str(int(value)))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
+
+    def spectRowValueChange(self, param, value):
+        self.AndorDeviceThread.setLeftPx(int(value))
+        self.configParser.set('Andor', 'spect_row', str(int(value)))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
 
     @QtCore.pyqtSlot()
     def clearGUIElements(self):
