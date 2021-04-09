@@ -108,12 +108,12 @@ class MakoDevice(Devices.BrillouinDevice.Device):
     def setExpTime(self, expTime):
         #print('[MakoDevice] setExpTime got called with value=', expTime)
         self.changeSetting(self.mako_lock, lambda:self.camera.ExposureTime.SetValue(expTime*1000))
-        print("[MakoDevice] Exposure time set to %.3f ms" % expTime)
+        #print("[MakoDevice] Exposure time set to %.3f ms" % expTime)
 
     def setFrameRate(self, frameRate):
         #print('[MakoDevice] setFrameRate got called with value=', frameRate)
         self.changeSetting(self.mako_lock, lambda:self.camera.AcquisitionFrameRate.SetValue(frameRate))
-        print("[MakoDevice] Frame rate set to %.3f Hz" % frameRate)
+        #print("[MakoDevice] Frame rate set to %.3f Hz" % frameRate)
 
 # This class does the computation for free running mode, mostly displaying
 # to the GUI
@@ -125,6 +125,7 @@ class MakoFreerun(Devices.BrillouinDevice.DeviceProcess):
 
     # data is an numpy array of type int32
     def doComputation(self, data):
-        image = np.flip(data.transpose((1,0)),1)
+        #image = np.flip(data.transpose((1,0)),1)
+        image = np.flip(data, (0, 1))
         self.updateCMOSImageSig.emit(image)
         return image

@@ -72,7 +72,7 @@ class AndorDevice(Devices.BrillouinDevice.Device):
 
     def pauseBGsubtraction(self, pauseStatus):
         self.pauseBG = pauseStatus
-        print('Background subtraction pause status =', pauseStatus)
+        #print('Background subtraction pause status =', pauseStatus)
 
     # getData() acquires an image from Andor
     def getData(self):
@@ -185,7 +185,7 @@ class AndorDevice(Devices.BrillouinDevice.Device):
             except:
                 print('[AndorDevice] Could not setExposure')
         #self.changeSetting(self.andor_lock, lambda:self.cam.SetExposureTime(exposureTime))
-        print("[AndorDevice] Exposure set to %f s" % exposureTime)
+        #print("[AndorDevice] Exposure set to %f s" % exposureTime)
 
     def forceSetExposure(self, exposureTime):
         #print('[AndorDevice] forceSetExposure got called!')
@@ -194,7 +194,7 @@ class AndorDevice(Devices.BrillouinDevice.Device):
             #print('reply =', reply)
         except:
             print('[AndorDevice] Could not forceSetExposure')
-        print("[AndorDevice] Exposure set to %f s" % exposureTime)
+        #print("[AndorDevice] Exposure set to %f s" % exposureTime)
 
     def getTemperature(self):
         temp = self.getAndorSetting(self.cam.GetTemperature, 'temperature')
