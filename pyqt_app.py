@@ -624,7 +624,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         # Update Brillouin vs. time plot
         if len(newData)+len(self.sampleScanDepthData) > self.maxScanPoints:
             if self.calPoints > 0:
-                self.sampleScanDepthData = np.array([])
+                self.sampleScanDepthData = np.array(newData)
             else:
                 t = self.maxScanPoints - len(newData) - len(self.sampleScanDepthData)
                 self.sampleScanDepthData = np.roll(self.sampleScanDepthData, t)
@@ -665,7 +665,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         else:
             if self.calPoints > 0:
                 self.sampleSpecSeriesData = np.zeros((self.maxScanPoints, len(rawSpect)))
-                self.sampleSpecSeriesSize = 0
+                self.sampleSpecSeriesData[0,:] = rawSpect
+                self.sampleSpecSeriesSize = 1
             else:
                 self.sampleSpecSeriesData = np.roll(self.sampleSpecSeriesData, -1, axis=0)
                 self.sampleSpecSeriesData[-1, :] = rawSpect
