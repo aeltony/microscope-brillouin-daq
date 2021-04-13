@@ -40,8 +40,6 @@ class BrillouinTreeModel(QtGui.QStandardItemModel):
 			headItem = changedItem.parent().child(scanIdx, 0)
 			noteItem = changedItem.parent().child(scanIdx, 2)
 			scanData = self.session.experimentList[changedItem.parent().row()].scanList[scanIdx]
-			print('headItem =',headItem)
-			print('noteItem =', noteItem)
 
 
 			if (str(noteItem.text()) != scanData.note):			# Change scan note
@@ -56,10 +54,6 @@ class BrillouinTreeModel(QtGui.QStandardItemModel):
 				deletedField = 'Exp_' + str(changedItem.parent().row()) + '/Scan_' + str(scanIdx) + '/deleted'
 				self.session.saveToFile(updateFieldOnly=True, fieldPath=deletedField)
 				self.activeExperimentSig.emit(self.activeExperiment)
-
-	def clearTree(self):
-		self.removeRows(1, self.rowCount())
-		#self.clear()
 
 	def deleteScan(self, item):
 		# Set foreground color to red

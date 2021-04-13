@@ -127,14 +127,6 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.allParameters = Parameter.create(name='params', type='group', children=self.params)
         self.parameterTreeWidget.setParameters(self.allParameters, showTop=False)
 
-        self.model = BrillouinTreeModel()
-
-        self.treeView.setModel(self.model)
-        self.treeView.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        self.treeView.customContextMenuRequested.connect(self.createTreeMenu)
-        self.treeView.setEnabled(False)
-        self.treeView.selectionModel().selectionChanged.connect(self.treeSelectionChanged)
-
         self.session = None
         self.dataFile = None
         self.dataFileName = None
@@ -521,7 +513,6 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.sampleSpecSeriesData = np.zeros((self.maxScanPoints, 210))
         self.sampleSpecSeriesSize = 0
 
-        self.BrillouinScan.saveScan = True
         self.BrillouinScan.sessionData = self.session
         self.BrillouinScan.saveExpIndex = self.model.activeExperiment
 
@@ -554,8 +545,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         if self.BrillouinScan.Cancel_Flag == False:
             currExp = self.session.experimentList[self.BrillouinScan.saveExpIndex]
             currScanIdx = self.session.experimentList[self.BrillouinScan.saveExpIndex].size() - 1
-            SD = currExp.getSD(currScanIdx)
-            FSR = currExp.getFSR(currScanIdx)
+            SD = self.BrillouinScan.SDcal
+            FSR = self.BrillouinScan.FSRcal
             if ~np.isnan(SD):
                 self.allParameters.child('Scan').child('SD').setValue(SD)
             if ~np.isnan(FSR):
@@ -712,17 +703,19 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         else:
             return
 
-        #if self.session is not None:
-        #    self.session.clearExperiments()
-        #    self.session = None
-        #    self.model.clearTree()
-        #self.treeView.setEnabled(False)
-
         self.dataFileName = filename
         self.sessionName.setText(filename)
 
         #create a single new session
         self.session = SessionData(ntpath.basename(self.dataFileName), filename=filename)
+
+        # create tree model (for display)
+        self.model = BrillouinTreeModel()
+        self.treeView.setModel(self.model)
+        self.treeView.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.treeView.customContextMenuRequested.connect(self.createTreeMenu)
+        self.treeView.selectionModel().selectionChanged.connect(self.treeSelectionChanged)
+
         self.model.session = self.session
 
         self.session.updateTreeViewSig.connect(

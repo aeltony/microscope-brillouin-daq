@@ -11,8 +11,7 @@ import DataFitting
 # Scans are sequential measurements comprised of one or many different pieces 
 # of hardware. A subset of the data acqusition are taken sequentially while 
 # others can be free running in their own threads. The ScanManager controls the 
-# sequential data acqusitions and synchronizes with the free running ones using
-# ??? (time tags?). Processing of data from individual instruments are done in 
+# sequential data acqusitions. Processing of data from individual instruments are done in 
 # their corresponding threads asynchronously from both the scan manager and the 
 # data acqusition threads. 
 # The scan manager also synchronizes the processed data
@@ -23,7 +22,6 @@ class ScanManager(QtCore.QThread):
 	motorPosUpdateSig = pyqtSignal(list)
 	clearGUISig = pyqtSignal()
 
-	#TODO: add a pause event
 	def __init__(self, stop_event, motor, shutter, synth):
 		super(ScanManager,self).__init__()
         # TODO: change to dictionary
@@ -31,22 +29,18 @@ class ScanManager(QtCore.QThread):
 		self.sequentialProcessingList = []
 		self.partialAcqList = []
 		self.partialProcessingList = []
-		self.freerunningList = []
 		self.stop_event = stop_event
 
 		self.motor = motor
 		self.shutter = shutter
 		self.synth = synth
 
-		self.processor = None
-
-		self.saveScan = True
 		self.sessionData = None
 		self.saveExpIndex = -1	# this is the expScanIndices argument in the Session.saveToFile() method
-
 		self.scanSettings = None
 		self.Cancel_Flag = False
-
+		self.SDcal = np.nan
+		self.FSRcal = np.nan
 
 	# TODO: add a lock for accessing these variables
 	def assignScanSettings(self, settings):
@@ -63,13 +57,6 @@ class ScanManager(QtCore.QThread):
 		self.partialAcqList.append(deviceThread)
 		self.partialProcessingList.append(processingThread)
 
-	def addToFreerunningList(self, deviceThread):
-		self.freerunningList.append(deviceThread)
-
-	# processor is a method that takes a list of Brillouin shifts and other arguments as needed
-	def addDataProcessor(self, processor):
-		self.processor = processor
-
   	# In a sequential scan, the following sequence must be followed
   	#	dev.doSomethingStart()
   	#	dev.doSomethingWait()
@@ -82,13 +69,12 @@ class ScanManager(QtCore.QThread):
 		self.setPriority(QtCore.QThread.TimeCriticalPriority)
 
 		# make sure saving settings are ok
-		if self.saveScan:
-			if self.sessionData is None:
-				print("[ScanManager] No Session provided to save data in; set ScanManager.sessionData first")
-				return
-			if self.saveExpIndex == -1:
-				print("[ScanManager] Save parameter is empty; set ScanManager.saveParameter first")
-				return
+		if self.sessionData is None:
+			print("[ScanManager] No Session provided to save data in; set ScanManager.sessionData first")
+			return
+		if self.saveExpIndex == -1:
+			print("[ScanManager] Save parameter is empty; set ScanManager.saveParameter first")
+			return
 
 		# Switch to sample arm
 		self.shutter.setShutterState((1, 0))
@@ -264,15 +250,15 @@ class ScanManager(QtCore.QThread):
 		# Find SD / FSR of final calibration curve
 		idx = frames[1]*frames[2]-1
 		try:
-			SDcal, FSRcal = DataFitting.fitCalCurve(np.copy(calPeakDist[idx*calFrames:(idx+1)*calFrames]), np.copy(calFreqRead[idx]), 1e-6, 1e-6)
-			print('[ScanManager] Fitted SD =', SDcal)
-			print('[ScanManager] Fitted FSR =', FSRcal)
+			self.SDcal, self.FSRcal = DataFitting.fitCalCurve(np.copy(calPeakDist[idx*calFrames:(idx+1)*calFrames]), np.copy(calFreqRead[idx]), 1e-6, 1e-6)
+			print('[ScanManager] Fitted SD =', self.SDcal)
+			print('[ScanManager] Fitted FSR =', self.FSRcal)
 		except:
-			SDcal = np.nan
-			FSRcal = np.nan
+			self.SDcal = np.nan
+			self.FSRcal = np.nan
 		# Saved fitted SD/FSR
-		volumeScan.SD = SDcal
-		volumeScan.FSR = FSRcal
+		volumeScan.SD = self.SDcal
+		volumeScan.FSR = self.FSRcal
 
 		self.sessionData.experimentList[self.saveExpIndex].addScan(volumeScan)
 		scanIdx = self.sessionData.experimentList[self.saveExpIndex].size() - 1

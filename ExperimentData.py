@@ -16,12 +16,12 @@ from PyQt5.QtCore import pyqtSignal
 # closing the desired file. It is the user's responsibility to ensure that the data 
 # in these classes is consistent with the data in the file.
 
-# Most data should not be changed once saved to file. One except is "note", which is a string
+# Most data should not be changed once saved to file. One exception is "note", which is a string
 # attribute in all of the classes below. Therefore we also keep track of which data has
 # been modified since last saved
 
 
-#TODO: save backup files to avoid data corruption 
+#TODO: save backup files to avoid data corruption
 #TOD: auto save to file when modifying to prevent potential out of sync between data struct and file
 
 # pList is a list of dictionaries
@@ -49,16 +49,16 @@ class SessionData(QtCore.QObject):
 	# Attributes to save
 	# TODO: set the types of these attributes 
 	savedAttributes = ['name', 'timestamp', 'note']	# these are hdf5 attributes
-	savedDataset = []	
+	savedDataset = []
 
 	def __init__(self, name, timestamp = 'None', filename = None):
 		super(SessionData,self).__init__()
-
 		self.filename = filename
 		self.name = name
 		self.timestamp = timestamp
 		self.experimentList = []
 		self.note = ""
+		#self.updateTreeViewSig.emit([])
 
 	def size(self):
 		return len(self.experimentList)
@@ -72,14 +72,10 @@ class SessionData(QtCore.QObject):
 	def addNewExperiment(self, filename = None):
 		newExp = ExperimentData("New Experiment")
 		self.addExperiment(newExp)
-
 		if filename is not None:
 			self.saveToFile([(newExp.index,[])], filename = filename )
 		elif self.filename is not None:
 			self.saveToFile( [(newExp.index,[])] )
-
-	def clearExperiments(self):
-		self.experimentList = []
 
 	def getNote(self):
 		return self.note
@@ -103,8 +99,7 @@ class SessionData(QtCore.QObject):
 		else:
 			print("[SessionData/saveToFile] filename not provided")
 			return
-		# print filename
-		print("[SessionData/saveToFile] Session File Save: " + filename)
+		#print("[SessionData/saveToFile] Session File Save: " + filename)
 		with h5py.File(filename, 'a') as fHandle:
 			if updateFieldOnly:	#TODO: throw errors when the field path is invalid
 				pathElements = fieldPath.split('/')
@@ -137,7 +132,6 @@ class SessionData(QtCore.QObject):
 				if hasattr(self, data):
 					# first check if file already has this dataset
 					datasetName = data
-					# print('Saving session: ' + datasetName)
 					if datasetName in fHandle:	# delete if already exist
 						del fHandle[datasetName]
 					fHandle.create_dataset(datasetName, data=self.__dict__[data])
@@ -149,7 +143,6 @@ class SessionData(QtCore.QObject):
 		self.updateTreeViewSig.emit(expScanIndices)
 
 
-		#TODO: check to see if there is any deleted exp/scan that is still in file by walking through file system
 
 # parent is the containing Session
 class ExperimentData:
@@ -167,37 +160,17 @@ class ExperimentData:
 		self.parent = parent
 		self.deleted = False		# data is never completely deleted, only flagged
 
-	# returns (BS)
-	def getBS(self, noDeleted = True):
-		BSList = []
-		for scan in self.scanList:
-			if scan.deleted:
-				continue
-			BS = scan.BS
-			BSList.append(BS)
-		return BSList
-
-	def getSD(self, scanIdx):
-		scan = self.scanList[scanIdx]
-		SD = scan.SD
-		return SD
-
-	def getFSR(self, scanIdx):
-		scan = self.scanList[scanIdx]
-		FSR = scan.FSR
-		return FSR
-
 	# get indices of not deleted scans
-	def getActiveScanIndices(self):
-		scanIndexList = []
-		idx = 0
-		for scan in self.scanList:
-			if scan.deleted:
-				idx += 1
-				continue
-			scanIndexList.append(idx)
-			idx += 1
-		return scanIndexList
+	#def getActiveScanIndices(self):
+	#	scanIndexList = []
+	#	idx = 0
+	#	for scan in self.scanList:
+	#		if scan.deleted:
+	#			idx += 1
+	#			continue
+	#		scanIndexList.append(idx)
+	#		idx += 1
+	#	return scanIndexList
 
 	def size(self):
 		return len(self.scanList)
@@ -241,15 +214,14 @@ class ExperimentData:
 			if hasattr(self, data):
 				# first check if file already has this dataset
 				datasetName = datasetPath + data
-				# print('Saving experiment: ' + datasetName)
 				if datasetName in fHandle:	# delete if already exist
 					del fHandle[datasetName]
 				fHandle.create_dataset(datasetName, data=self.__dict__[data])
 
 		gp = fHandle[datasetPath]
-		for attribute in ExperimentData.savedAttributes:				
+		for attribute in ExperimentData.savedAttributes:
 			if hasattr(self, attribute):
-				gp.attrs[attribute] = self.__dict__[attribute]	
+				gp.attrs[attribute] = self.__dict__[attribute]
 
 
 
@@ -307,27 +279,43 @@ class ScanData:
 			if hasattr(self, data):
 				# first check if file already has this dataset
 				datasetName = datasetPath + data
-				# print('Saving scan: ' + datasetName)
 				if datasetName in fHandle:	# delete if already exist
-					del fHandle[datasetName]
+					pass
+					#del fHandle[datasetName]
 				if hasattr(self.__dict__[data], '__len__') and (not isinstance(self.__dict__[data], str)):
 					#print('Compressing data:' + datasetName)
 					fHandle.create_dataset(datasetName, data=self.__dict__[data], chunks=True, \
 						shuffle=True, compression='lzf')
+					# Once saved to file, delete data from working memory
+					try:
+						self.__dict__[data] = None
+					except:
+						print('[ExperimentData/saveToFile] Could not free memory (1)')
 				else:
 					# print('Not compressing data:' + datasetName)
 					fHandle.create_dataset(datasetName, data=self.__dict__[data])
+					# Once saved to file, delete data from working memory
+					try:
+						self.__dict__[data] = None
+					except:
+						print('[ExperimentData/saveToFile] Could not free memory (2)')
 
 		gp = fHandle[datasetPath]
-		for attribute in ScanData.savedAttributes:				
+		for attribute in ScanData.savedAttributes:
 			if hasattr(self, attribute):
-				gp.attrs[attribute] = self.__dict__[attribute]	
+				gp.attrs[attribute] = self.__dict__[attribute]
 
 		if hasattr(self, 'flattenedParamList'):
 			for item in self.flattenedParamList:
 				if item[1] != None:
 					attrName = 'paramtree/' + item[0]
 					gp.attrs[attrName] = item[1]
+			# Once saved to file, delete data from working memory
+			try:
+				self.__dict__['flattenedParamList'] = None
+			except:
+				print('[ExperimentData/saveToFile] Could not free memory (3)')
+
 
 
 	# def generateTestData(self, index, fakeArray = None):
