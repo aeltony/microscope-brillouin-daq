@@ -124,9 +124,16 @@ class ScanManager(QtCore.QThread):
 						self.motor.moveAbs('x', motorCoords[0,0])
 						self.motor.moveAbs('y', motorCoords[0,1])
 						self.motor.moveAbs('z', motorCoords[0,2])
+						# Stop acquiring data
 						for (dev, devProcessor) in zip(self.sequentialAcqList + self.partialAcqList, self.sequentialProcessingList + self.partialProcessingList):
 							devProcessor.enqueueData = False
 							dev.runMode = 0
+						# Wait for all processing threads to complete + empty the data queues (free up working memory)
+						for devProcessor in self.sequentialProcessingList + self.partialProcessingList:
+							while devProcessor.isIdle == False:
+								time.sleep(0.1)
+							while not devProcessor.processedData.empty():
+								devProcessor.processedData.get()
 						# Send signal to clear GUI plots
 						self.clearGUISig.emit()
 						self.maxScanPoints = 400 # Re-scale plot window for free-running mode

@@ -24,8 +24,8 @@ class ZaberDevice(Devices.BrillouinDevice.Device):
         self.port = zs.AsciiSerial("COM4", baud=115200, timeout = 20, inter_char_timeout = 0.05)
         self.xy_device = zs.AsciiDevice(self.port, 3)
         self.z_device = zs.AsciiDevice(self.port, 4)
-        self.x_axis = zs.AsciiAxis(self.xy_device, 1)
-        self.y_axis = zs.AsciiAxis(self.xy_device, 2)
+        self.y_axis = zs.AsciiAxis(self.xy_device, 1)
+        self.x_axis = zs.AsciiAxis(self.xy_device, 2)
         self.z_axis = zs.AsciiAxis(self.z_device, 1)
         reply = self.z_axis.home()
         if self.checkReply(reply):
