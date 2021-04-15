@@ -242,7 +242,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
         # sampleScanDepthPlot is the Brillouin vs z axis plot
         self.sampleScanDepthPlot = pg.PlotItem()
-        self.sampleScanDepthPlot.setYRange(5,6)
+        self.sampleScanDepthPlot.setYRange(4.8,5.9)
         self.graphicsViewSampleScanDepth.setCentralItem(self.sampleScanDepthPlot)
         self.sampleScanDepthPlot.enableAutoRange(axis=self.sampleScanDepthPlot.vb.XAxis, enable=True)
         self.sampleScanDepthItem = pg.PlotDataItem() 
@@ -615,7 +615,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         heatmapSeq = np.pad(self.heatmapScanData, (0, self.maxRowPoints*self.maxColPoints - self.heatmapScanData.shape[0]), 'constant')
         heatmapSeq[np.isnan(heatmapSeq)] = 0 #Remove NaNs
         heatmapArr = np.reshape(heatmapSeq, (-1, self.maxRowPoints))   # self.maxRowPoints columns
-        heatmapArr[1::2, :-self.calPoints] = np.fliplr(heatmapArr[1::2, :-self.calPoints]) # Match S-shaped line scan pattern
+        #heatmapArr[1::2, :-self.calPoints] = np.fliplr(heatmapArr[1::2, :-self.calPoints]) # Match S-shaped line scan pattern
         heatmapArr = np.rot90(heatmapArr, 1, (1,0)) # Rotate to match XY axes
         colormapLow = self.allParameters.child('Display').child('Colormap (min.)').value()
         colormapHigh = self.allParameters.child('Display').child('Colormap (max.)').value()
