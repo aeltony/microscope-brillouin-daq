@@ -93,7 +93,7 @@ class ScanManager(QtCore.QThread):
 		# free running mode off now; safe to force hardware settings
 		self.sequentialAcqList[0].forceSetExposure(self.scanSettings['sampleExp'])
 
-		# Pause all processors and clear any data 
+		# Pause all processors and clear any data
 		for devProcessor in self.sequentialProcessingList + self.partialProcessingList:
 			while devProcessor.isIdle == False:
 				time.sleep(0.1)
@@ -157,12 +157,18 @@ class ScanManager(QtCore.QThread):
 					# Move one X step forward/backward if not end of line
 					if k < frames[0]-1:
 						if (i+j)%2 == 0:
+							if k == 0 and j > 0:
+								self.motor.moveRelative('x', 2.8125) #2.8125
 							self.motor.moveRelative('x', step[0])
 							#self.motor.setMotorAsync('moveRelative', 'x', [step[0]])
 						else:
+							# Backlash compensation
+							if k == 0 and j > 0:
+								self.motor.moveRelative('x', -2.8125) #-2.96875
 							self.motor.moveRelative('x', -step[0])
 							#self.motor.setMotorAsync('moveRelative', 'x', [-step[0]])
-					else: # take calibration data at end of line
+					else:
+						# take calibration data at end of line
 						self.shutter.setShutterState((0, 1)) # switch to reference arm
 						self.sequentialAcqList[0].forceSetExposure(self.scanSettings['refExp'])
 						self.sequentialAcqList[0].pauseBGsubtraction(True)
