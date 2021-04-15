@@ -152,21 +152,10 @@ class ScanManager(QtCore.QThread):
 					motorPos = self.motor.updatePosition()
 					#print('motorPos =', motorPos)
 					motorCoords[i*frames[1]*frames[0] + j*frames[0] + k] = np.array(motorPos)
-					#motorCoords = np.vstack((motorCoords, np.array(motorPos)))
 					self.motorPosUpdateSig.emit(motorPos)
-					# Move one X step forward/backward if not end of line
+					# Move one X step forward if not end of line
 					if k < frames[0]-1:
-						if (i+j)%2 == 0:
-							if k == 0 and j > 0:
-								self.motor.moveRelative('x', 2.8125) #2.8125
-							self.motor.moveRelative('x', step[0])
-							#self.motor.setMotorAsync('moveRelative', 'x', [step[0]])
-						else:
-							# Backlash compensation
-							if k == 0 and j > 0:
-								self.motor.moveRelative('x', -2.8125) #-2.96875
-							self.motor.moveRelative('x', -step[0])
-							#self.motor.setMotorAsync('moveRelative', 'x', [-step[0]])
+						self.motor.moveRelative('x', step[0])
 					else:
 						# take calibration data at end of line
 						self.shutter.setShutterState((0, 1)) # switch to reference arm
@@ -183,20 +172,25 @@ class ScanManager(QtCore.QThread):
 							for dev in self.sequentialAcqList + self.partialAcqList:
 								dev.completeEvent.wait()
 								dev.completeEvent.clear()
+						# return to start position after end of line
+						#self.motor.moveRelative('x', -2.8125) # reverse backlash correction
+						for m in range(frames[0]-1):
+							self.motor.moveRelative('x', -step[0])
+						#self.motor.moveRelative('x', 2.8125) # forward backlash correction
 						# return to sample arm
 						self.shutter.setShutterState((1, 0))
 						self.sequentialAcqList[0].forceSetExposure(self.scanSettings['sampleExp'])
 						self.sequentialAcqList[0].pauseBGsubtraction(False)
 				if j < frames[1]-1:
-					if i%2 == 0:
-						self.motor.moveRelative('y', step[1])
-						#self.motor.setMotorAsync('moveRelative', 'y', [step[1]])
-					else:
+					self.motor.moveRelative('y', step[1])
+				else:
+					# return to start position after end of line
+					#self.motor.moveRelative('y', -2.8125) # reverse backlash correction
+					for n in range(frames[1]-1):
 						self.motor.moveRelative('y', -step[1])
-						#self.motor.setMotorAsync('moveRelative', 'y', [-step[1]])
+					#self.motor.moveRelative('y', 2.8125) # forward backlash correction
 			if i < frames[2]-1:
 				self.motor.moveRelative('z', step[2])
-				#self.motor.setMotorAsync('moveRelative', 'z', [step[2]])
 
 		# Return to start location
 		self.motor.moveAbs('x', motorCoords[0,0])
