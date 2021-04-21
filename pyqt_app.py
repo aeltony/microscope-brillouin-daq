@@ -572,8 +572,13 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
     def bgSubtraction(self, sliderParam, state):
         if state:
+            self.ShutterDevice.closeBGshutter()
             self.AndorDeviceThread.startBGsubtraction()
             print("Spectrometer background subtraction ON")
+            # Wait until BG subtraction is complete before re-opening shutter
+            while self.AndorDeviceThread.checkBGsubtraction():
+                time.sleep(0.1)
+            self.ShutterDevice.openBGshutter()
         else:
             self.AndorDeviceThread.stopBGsubtraction()
             print("Spectrometer background subtraction OFF")

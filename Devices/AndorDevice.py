@@ -67,6 +67,10 @@ class AndorDevice(Devices.BrillouinDevice.Device):
     def startBGsubtraction(self):
         self.triggerBG = True
 
+    # Check if BG subtraction is complete
+    def checkBGsubtraction(self):
+        return self.triggerBG
+
     def stopBGsubtraction(self):
         self.bgSubtraction = False
 
@@ -83,15 +87,19 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         if self.autoExp:
             im_arr = self.getData2()
         else:
-            with self.andor_lock:
-                self.cam.StartAcquisition()
-                self.cam.GetAcquiredData2(self.imageBufferPointer)
-            #expTime = self.getExposure()
-            imageSize = int(self.cam.GetAcquiredDataDim())
-            # return a copy of the data, since the buffer is reused for next frame
-            im_arr = np.array(self.imageBuffer[0:imageSize], copy=True, dtype = np.uint16)
-            if self.bgSubtraction and not self.pauseBG:
-                im_arr = im_arr - self.bgImage
+            try:
+                with self.andor_lock:
+                    self.cam.StartAcquisition()
+                    self.cam.GetAcquiredData2(self.imageBufferPointer)
+                #expTime = self.getExposure()
+                imageSize = int(self.cam.GetAcquiredDataDim())
+                # return a copy of the data, since the buffer is reused for next frame
+                im_arr = np.array(self.imageBuffer[0:imageSize], copy=True, dtype = np.uint16)
+                if self.bgSubtraction and not self.pauseBG:
+                    im_arr = im_arr - self.bgImage
+            except:
+                print('[AndorDevice] Timed out while waiting for frame')
+                im_arr = np.zeros(50*210)
         return im_arr
 
     def getBG(self):
