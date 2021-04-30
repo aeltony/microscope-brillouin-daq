@@ -74,6 +74,9 @@ class SynthDevice(Devices.BrillouinDevice.Device):
 
     def setPower(self, power):
         #print('[SynthDevice] setPower got called with power =', power)
-        command = b'POWER +%.1f' % power + b'dBm\n'
+        if power < 0:
+            command = b'POWER -%.1f' % abs(power) + b'dBm\n'
+        else:
+            command = b'POWER +%.1f' % power + b'dBm\n'
         self.port.write(command)
         #print("[SynthDevice] Power set to %.1f dBm" % power)

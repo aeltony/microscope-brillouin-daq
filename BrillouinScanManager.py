@@ -100,7 +100,7 @@ class ScanManager(QtCore.QThread):
 			devProcessor.enqueueData = True
 			while not devProcessor.processedData.empty():
 				devProcessor.processedData.get()
-			
+
 		# Send signal to clear GUI plots
 		self.clearGUISig.emit()
 
@@ -121,9 +121,12 @@ class ScanManager(QtCore.QThread):
 					if self.Cancel_Flag == True:
 						print('[ScanManager/run] Cancel_Flag! Terminating scan...')
 						# Return to start location
-						self.motor.moveAbs('x', motorCoords[0,0])
-						self.motor.moveAbs('y', motorCoords[0,1])
-						self.motor.moveAbs('z', motorCoords[0,2])
+						if step[0] > 0:
+							self.motor.moveAbs('x', motorCoords[0,0])
+						if step[1] > 0:
+							self.motor.moveAbs('y', motorCoords[0,1])
+						if step[2] > 0:
+							self.motor.moveAbs('z', motorCoords[0,2])
 						# Stop acquiring data
 						for (dev, devProcessor) in zip(self.sequentialAcqList + self.partialAcqList, self.sequentialProcessingList + self.partialProcessingList):
 							devProcessor.enqueueData = False
@@ -155,7 +158,8 @@ class ScanManager(QtCore.QThread):
 					self.motorPosUpdateSig.emit(motorPos)
 					# Move one X step forward if not end of line
 					if k < frames[0]-1:
-						self.motor.moveRelative('x', step[0])
+						if step[0] > 0:
+							self.motor.moveRelative('x', step[0])
 					else:
 						# take calibration data at end of line
 						self.shutter.setShutterState((0, 1)) # switch to reference arm
@@ -174,28 +178,35 @@ class ScanManager(QtCore.QThread):
 								dev.completeEvent.clear()
 						# return to start position after end of line
 						#self.motor.moveRelative('x', -2.8125) # reverse backlash correction
-						for m in range(frames[0]-1):
-							self.motor.moveRelative('x', -step[0])
+						if step[0] > 0:
+							for m in range(frames[0]-1):
+								self.motor.moveRelative('x', -step[0])
 						#self.motor.moveRelative('x', 2.8125) # forward backlash correction
 						# return to sample arm
 						self.shutter.setShutterState((1, 0))
 						self.sequentialAcqList[0].forceSetExposure(self.scanSettings['sampleExp'])
 						self.sequentialAcqList[0].pauseBGsubtraction(False)
 				if j < frames[1]-1:
-					self.motor.moveRelative('y', step[1])
+					if step[1] > 0:
+						self.motor.moveRelative('y', step[1])
 				else:
 					# return to start position after end of line
 					#self.motor.moveRelative('y', -2.8125) # reverse backlash correction
-					for n in range(frames[1]-1):
-						self.motor.moveRelative('y', -step[1])
+					if step[1] > 0:
+						for n in range(frames[1]-1):
+							self.motor.moveRelative('y', -step[1])
 					#self.motor.moveRelative('y', 2.8125) # forward backlash correction
 			if i < frames[2]-1:
-				self.motor.moveRelative('z', step[2])
+				if step[2] > 0:
+					self.motor.moveRelative('z', step[2])
 
 		# Return to start location
-		self.motor.moveAbs('x', motorCoords[0,0])
-		self.motor.moveAbs('y', motorCoords[0,1])
-		self.motor.moveAbs('z', motorCoords[0,2])
+		if step[0] > 0:
+			self.motor.moveAbs('x', motorCoords[0,0])
+		if step[1] > 0:
+			self.motor.moveAbs('y', motorCoords[0,1])
+		if step[2] > 0:
+			self.motor.moveAbs('z', motorCoords[0,2])
 		# Send motor position signal to update GUI
 		motorPos = self.motor.updatePosition()
 		self.motorPosUpdateSig.emit(motorPos)
@@ -210,13 +221,13 @@ class ScanManager(QtCore.QThread):
 		calFrames = calFreq.shape[0]
 		dataset = {'Andor': [], 'Mako': [], 'TempSensor': []}
 		for (dev, devProcessor) in zip(self.sequentialAcqList, self.sequentialProcessingList):
-			while devProcessor.processedData.qsize() > frames[0]*frames[1]*frames[2] + calFrames*frames[0]*frames[1]:
+			while devProcessor.processedData.qsize() > frames[0]*frames[1]*frames[2] + calFrames*frames[1]*frames[2]:
 				devProcessor.processedData.get() # pop out the first few sets of data stored before scan started
 			while not devProcessor.processedData.empty():
 				data = devProcessor.processedData.get()	# data[0] is a counter
 				dataset[dev.deviceName].append(data[1])
 		for (dev, devProcessor) in zip(self.partialAcqList, self.partialProcessingList):
-			while devProcessor.processedData.qsize() > calFrames*frames[0]*frames[1]:
+			while devProcessor.processedData.qsize() > calFrames*frames[1]*frames[2]:
 				devProcessor.processedData.get() # pop out the first few sets of data stored before scan started
 			while not devProcessor.processedData.empty():
 				data = devProcessor.processedData.get()	# data[0] is a counter
