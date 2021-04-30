@@ -7,7 +7,7 @@ from PyQt5.QtCore import pyqtSignal
 import numpy as np
 
 # Called "Mako" for historical reasons, this is a FLIR camera.
-# This is the CMOS camera.
+# This is the brightfield/epifluorescence CMOS camera.
 
 class MakoDevice(Devices.BrillouinDevice.Device):
 
@@ -36,7 +36,6 @@ class MakoDevice(Devices.BrillouinDevice.Device):
         else:
             print('[MakoDevice] FLIR camera could not be initialized')
         self.set_up()
-        self.camera.BeginAcquisition()
         self.mako_lock = app.mako_lock
         self.runMode = 0    #0 is free running, 1 is scan
     
@@ -53,7 +52,7 @@ class MakoDevice(Devices.BrillouinDevice.Device):
             self.camera.Gain.SetValue(0) # dB
             self.camera.AcquisitionFrameRateEnable.SetValue(True)
             self.camera.AcquisitionFrameRate.SetValue(5) # Hz
-            self.camera.AcquisitionMode.SetValue(0)
+            self.camera.AcquisitionMode.SetValue(1) # 0 = Continuous, 1 = Single Frame
         except PySpin.SpinnakerException as ex:
             print(str(ex))
         print('[MakoDevice] Set-up complete')
@@ -63,10 +62,6 @@ class MakoDevice(Devices.BrillouinDevice.Device):
 
     def shutdown(self):
         print("[MakoDevice] Closing Device")
-        try:
-            self.camera.EndAcquisition()
-        except:
-            print("[MakoDevice] Could not stop acquisition")
         try:
             self.camera.DeInit()
             self.camera = None
@@ -78,6 +73,7 @@ class MakoDevice(Devices.BrillouinDevice.Device):
     # getData() acquires an image from Mako
     def getData(self):
         with self.mako_lock:
+            self.camera.BeginAcquisition()
             #imgData = np.zeros((self.imageWidth,self.imageHeight), dtype=int)
             try:
                 self.image_result = self.camera.GetNextImage(1000)
@@ -103,6 +99,7 @@ class MakoDevice(Devices.BrillouinDevice.Device):
                             dtype = np.uint8,
                             shape = (height,width))
             self.image_result.Release()
+            self.camera.EndAcquisition()
         return image_arr
 
     def setExpTime(self, expTime):

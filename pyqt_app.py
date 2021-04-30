@@ -111,8 +111,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             ]},
             {'name': 'Spectrometer Camera', 'type': 'group', 'children': [
                 {'name': 'Background Subtraction', 'type':'toggle', 'ButtonText':('Turn on background subtraction', 'Turn off background subtraction')},
-                {'name': 'Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.05, 'limits':(0.01, 10)},
-                {'name': 'Ref. Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.05, 'limits':(0.01, 10)},
+                {'name': 'Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.01, 'limits':(0.001, 10)},
+                {'name': 'Ref. Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.01, 'limits':(0.001, 10)},
                 {'name': 'AutoExposure', 'type':'toggle', 'ButtonText':('Auto exposure', 'Fixed exposure')},         #False=Fixed exposure
                 {'name': 'Spectrum Column', 'type':'int', 'value': spectColumn, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
                 {'name': 'Spectrum Row', 'type':'int', 'value': spectRow, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
@@ -381,7 +381,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
         self.hardwareGetTimer = QTimer()
         self.hardwareGetTimer.timeout.connect(self.HardwareParamUpdate)
-        self.hardwareGetTimer.start(10000)
+        self.hardwareGetTimer.start(600000)
 
         # Separate timer for motor position, update at faster rate
         self.motorPositionTimer = QTimer()
@@ -393,12 +393,12 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         funcHandle(data.value())
 
     def HardwareParamUpdate(self):
-        # print("[HardwareParamUpdate]")
-        temp = self.AndorDeviceThread.getTemperature()
-        self.allParameters.child('Spectrometer Camera').child('Camera Temp.').setValue(temp)
-        # if (self.ShutterDevice.state == ShutterDevice.SAMPLE_STATE):
-            # expTime = self.AndorDeviceThread.getExposure()
-            # self.allParameters.child('Spectrometer Camera').child('Exposure').setValue(expTime)
+        #print("[HardwareParamUpdate]")
+        try:
+            temp = self.AndorDeviceThread.getTemperature()
+            self.allParameters.child('Spectrometer Camera').child('Camera Temp.').setValue(temp)
+        except:
+            print('Could not update AndorDevice temperature')
 
     @QtCore.pyqtSlot(list)
     def MotorPositionUpdate2(self, pos):
@@ -552,7 +552,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             if ~np.isnan(FSR):
                 self.allParameters.child('Scan').child('FSR').setValue(FSR)
         self.BrillouinScan.motorPosUpdateSig.disconnect(self.MotorPositionUpdate2)
-        self.hardwareGetTimer.start(10000)
+        self.hardwareGetTimer.start(60000)
         self.motorPositionTimer.start(500)
         self.BrillouinScan.Cancel_Flag = False
         print('Scan completed')

@@ -48,7 +48,7 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         self.cam.SetPixelEncoding(u'Mono32')
         self.cam.SetHBin(1)
         self.cam.SetVBin(1)
-        self.cam.SetWidth(50)
+        self.cam.SetWidth(49)
         self.cam.SetAOILeft(942)
         self.cam.SetHeight(210)
         self.cam.SetAOITop(1064)
@@ -87,19 +87,20 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         if self.autoExp:
             im_arr = self.getData2()
         else:
-            try:
-                with self.andor_lock:
+            with self.andor_lock:
+                try:
                     self.cam.StartAcquisition()
-                    self.cam.GetAcquiredData2(self.imageBufferPointer)
-                #expTime = self.getExposure()
-                imageSize = int(self.cam.GetAcquiredDataDim())
-                # return a copy of the data, since the buffer is reused for next frame
-                im_arr = np.array(self.imageBuffer[0:imageSize], copy=True, dtype = np.uint16)
-                if self.bgSubtraction and not self.pauseBG:
-                    im_arr = im_arr - self.bgImage
-            except:
-                print('[AndorDevice] Timed out while waiting for frame')
-                im_arr = np.zeros(50*210)
+                except:
+                    print('[AndorDevice] Timed out while waiting for frame')
+                    im_arr = np.zeros(49*210)
+                    return im_arr
+                self.cam.GetAcquiredData2(self.imageBufferPointer)
+            #expTime = self.getExposure()
+            imageSize = int(self.cam.GetAcquiredDataDim())
+            # return a copy of the data, since the buffer is reused for next frame
+            im_arr = np.array(self.imageBuffer[0:imageSize], copy=True, dtype = np.uint16)
+            if self.bgSubtraction and not self.pauseBG:
+                im_arr = im_arr - self.bgImage
         return im_arr
 
     def getBG(self):
@@ -225,15 +226,15 @@ class AndorProcessFreerun(Devices.BrillouinDevice.DeviceProcess):
 
     def __init__(self, device, stopProcessingEvent, finishedTrigger = None):
         super(AndorProcessFreerun, self).__init__(device, stopProcessingEvent, finishedTrigger)
-        self.binHeight = 10 # number of vertical pixels to bin
+        self.binHeight = 7 # number of vertical pixels to bin, typ. 10
 
     # data is an numpy array of type int32
     def doComputation(self, data):
-        proper_image = np.reshape(data, (-1, 50))   # 50 columns
+        proper_image = np.reshape(data, (-1, 49))   # 50 columns
         proper_image = np.rot90(proper_image, 1, (1,0)) # Rotate by 90 deg.
         # Perform software binning
         binned_image = proper_image.reshape(-1, self.binHeight, proper_image.shape[-1]).sum(1)
-        sline = binned_image[int(round(0.5*proper_image.shape[0]/self.binHeight)), :]
+        sline = binned_image[int(np.floor(0.5*proper_image.shape[0]/self.binHeight)), :]
 
         # Create images for GUI display
         positive_image = np.clip(proper_image, 0, 1e12)

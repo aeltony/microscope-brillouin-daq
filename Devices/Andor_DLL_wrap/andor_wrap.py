@@ -193,7 +193,18 @@ class Andor:
         error = self.dll.AT_WaitBuffer(self.handle, byref(self.imageBufferPointer), byref(self.im_size), 100000)
         if error != 0:
             print('Wait buffer error =', error)
-        self.verbose(ERROR_CODE[error], sys._getframe().f_code.co_name)
+            self.verbose(ERROR_CODE[error], sys._getframe().f_code.co_name)
+            # Stop acquisition
+            error = self.dll.AT_Command(self.handle, 'AcquisitionStop')
+            if error != 0:
+                print('Stop acq error =', error)
+            self.verbose(ERROR_CODE[error], sys._getframe().f_code.co_name)
+            # Try flushing buffers
+            error = self.dll.AT_Flush(self.handle)
+            if error != 0:
+                print('AT_Flush error:', ERROR_CODE[error])
+            self.verbose(ERROR_CODE[error], sys._getframe().f_code.co_name)
+            return ERROR_CODE[error]
         # Stop acquisition
         error = self.dll.AT_Command(self.handle, 'AcquisitionStop')
         if error != 0:
