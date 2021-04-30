@@ -83,8 +83,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
                 {'name': 'ToggleReference', 'type':'toggle', 'ButtonText':('Switch to Reference', 'Switch to Sample')},         #False=Sample="Switch to Ref"
                 {'name': 'Scan/Cancel', 'type': 'action2', 'ButtonText':('Scan', 'Cancel')},
                 {'name': 'More Settings', 'type': 'group', 'children': [
-                    {'name': 'Laser Focus X', 'type': 'int', 'value': laserX, 'suffix':' px', 'limits':(1,2048),'decimals':4},
-                    {'name': 'Laser Focus Y', 'type': 'int', 'value': laserY, 'suffix':' px', 'limits':(1,2048),'decimals':4}
+                    {'name': 'Laser Focus X', 'type': 'int', 'value': laserX, 'suffix':' px', 'limits':(-10000,10000),'decimals':4},
+                    {'name': 'Laser Focus Y', 'type': 'int', 'value': laserY, 'suffix':' px', 'limits':(-10000,10000),'decimals':4}
                 ]}
             ]},
             {'name': 'Display', 'type': 'group', 'children': [
@@ -120,7 +120,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             ]},        
             {'name': 'Microscope Camera', 'type': 'group', 'children': [
                 {'name': 'Exposure Time', 'type': 'float', 'value': 20, 'suffix':' ms', 'limits':(0.001, 10000)},
-                {'name': 'Frame Rate', 'type': 'int', 'value': 5, 'suffix':' Hz', 'limits':(1, 20)}
+                {'name': 'Frame Rate', 'type': 'int', 'value': 5, 'suffix':' Hz', 'limits':(1, 20)},
+                {'name': 'Magnification', 'type': 'float', 'value': 20, 'suffix':' X', 'limits':(0.01, 200)}
             ]}
         ]
         ## Create tree of Parameter objects
@@ -172,7 +173,12 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.CMOSview = pg.PlotItem()
         self.graphicsViewCMOS.setCentralItem(self.CMOSview)     # GraphicsView is the main graphics container
         self.CMOSview.setAspectLocked(True)
-        self.CMOSImage = pg.ImageItem(np.zeros((self.MakoDeviceThread.imageWidth//self.MakoDeviceThread.bin_size, self.MakoDeviceThread.imageHeight//self.MakoDeviceThread.bin_size)))      # ImageItem contains what needs to be plotted
+        self.pxWid = self.MakoDeviceThread.imageWidth//self.MakoDeviceThread.bin_size
+        self.pxHt = self.MakoDeviceThread.imageHeight//self.MakoDeviceThread.bin_size
+        self.CMOSImage = pg.ImageItem(np.zeros((self.pxWid, self.pxHt)))      # ImageItem contains what needs to be plotted
+        self.scaleFactor = 4.5/self.allParameters.child('Microscope Camera').child('Magnification').value() # 4.5 um/px
+        self.CMOSImage.translate(-0.5*self.pxWid*self.scaleFactor, -0.5*self.pxHt*self.scaleFactor)
+        self.CMOSImage.scale(self.scaleFactor, self.scaleFactor)
         self.CMOSview.addItem(self.CMOSImage)
         self.CMOSview.autoRange(padding=0)                      # gets rid of padding
         self.CMOSvLine = pg.InfiniteLine(angle=90, movable=False)
@@ -306,8 +312,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         pItem.child('Exposure').setValue(self.AndorDeviceThread.getExposure())
         pItem.child('Camera Temp.').setValue(self.AndorDeviceThread.getTemperature())
         # Spectrum Column / Row adjustment
-        pItem.child('Spectrum Column').sigValueChanging.connect(self.spectColumnValueChange)
-        pItem.child('Spectrum Row').sigValueChanging.connect(self.spectRowValueChange)
+        pItem.child('Spectrum Column').sigValueChanged.connect(self.spectColumnValueChange)
+        pItem.child('Spectrum Row').sigValueChanged.connect(self.spectRowValueChange)
 
         # ========================= Monitor Camera ==================================
         pItem = self.allParameters.child('Microscope Camera')
@@ -315,13 +321,14 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             lambda data: self.changeHardwareSetting(data, self.MakoDeviceThread.setExpTime))
         pItem.child('Frame Rate').sigValueChanged.connect(
             lambda data: self.changeHardwareSetting(data, self.MakoDeviceThread.setFrameRate))
+        pItem.child('Magnification').sigValueChanged.connect(self.magnificationChange)
 
         # ========================= Microwave Source ================================
         pItem = self.allParameters.child('Microwave Source')
         pItem.child('RF Frequency').sigValueChanged.connect(
             lambda data: self.changeHardwareSetting(data, self.SynthDevice.setFreq))
         pItem.child('RF Frequency').setValue(self.SynthDevice.getFreq())
-        pItem.child('RF Power').sigValueChanging.connect(self.synthPowerValueChange)
+        pItem.child('RF Power').sigValueChanged.connect(self.synthPowerValueChange)
         pItem.child('RF Power').setValue(self.SynthDevice.getPower())
 
         # ========================= Motor ===========================================
@@ -369,12 +376,12 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         pItem.child('Scan/Cancel').sigActivated.connect(self.startScan)
         pItem.child('Scan/Cancel').sigActivated2.connect(self.cancelScan)
         pItem.child('ToggleReference').sigActivated.connect(self.toggleReference)
-        pItem.child('FSR').sigValueChanging.connect(self.FSRValueChange)
-        pItem.child('SD').sigValueChanging.connect(self.SDValueChange)
+        pItem.child('FSR').sigValueChanged.connect(self.FSRValueChange)
+        pItem.child('SD').sigValueChanged.connect(self.SDValueChange)
         # Laser crosshair adjustment
-        pItem.child('More Settings').child('Laser Focus X').sigValueChanging.connect(
+        pItem.child('More Settings').child('Laser Focus X').sigValueChanged.connect(
             self.CMOSvLineValueChange)
-        pItem.child('More Settings').child('Laser Focus Y').sigValueChanging.connect(
+        pItem.child('More Settings').child('Laser Focus Y').sigValueChanged.connect(
             self.CMOShLineValueChange)
 
         # ========================= Hardware monitor timers ========================
@@ -427,6 +434,16 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.configParser.set('Scan', 'laser_position_x', str(int(value)))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
+
+    def magnificationChange(self):
+        # First, reset offset + scaling
+        self.CMOSImage.scale(1/self.scaleFactor, 1/self.scaleFactor)
+        self.CMOSImage.translate(0.5*self.pxWid*self.scaleFactor, 0.5*self.pxHt*self.scaleFactor)
+        # Then, update offset + scale
+        self.scaleFactor = 4.5/self.allParameters.child('Microscope Camera').child('Magnification').value() # 4.5 um/px
+        self.CMOSImage.translate(-0.5*self.pxWid*self.scaleFactor, -0.5*self.pxHt*self.scaleFactor)
+        self.CMOSImage.scale(self.scaleFactor, self.scaleFactor)
+        self.CMOSview.autoRange(padding=0)
 
     def synthPowerValueChange(self, param, value):
         self.SynthDevice.setPower(value)
@@ -490,12 +507,14 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             self.allParameters.child('Microwave Source').child('Cal. Freq (max.)').value() + \
             self.allParameters.child('Microwave Source').child('Cal. Freq (step)').value(), \
             self.allParameters.child('Microwave Source').child('Cal. Freq (step)').value())
+        magnification = self.allParameters.child('Microscope Camera').child('Magnification').value()
 
         flattenedParamList = generateParameterList(self.params, self.allParameters)
 
         scanSettings = {'step': stepSizeArr,
             'frames': frameNumArr,
             'calFreq': calFreq,
+            'magnification': magnification,
             'laserX': self.allParameters.child('Scan').child('More Settings').child('Laser Focus X').value(),
             'laserY': self.allParameters.child('Scan').child('More Settings').child('Laser Focus Y').value(),
             'refExp': self.allParameters.child('Spectrometer Camera').child('Ref. Exposure').value(),

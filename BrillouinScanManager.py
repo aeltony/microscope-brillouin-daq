@@ -110,6 +110,8 @@ class ScanManager(QtCore.QThread):
 		frames = self.scanSettings['frames']
 		step = self.scanSettings['step']
 		calFreq = self.scanSettings['calFreq']
+		imageSize = 9000.0/self.scanSettings['magnification'] # FLIR camera has 4.5 um/px, cropped to 2000 px
+		distX = 0.0 # Keep track of relative dist travelled in x-direction w.r.t imageSize to capture full field with FLIR camera
 		motorCoords = np.empty([frames[0]*frames[1]*frames[2],3]) # Keep track of coordinates
 		calFreqRead = np.empty([frames[1]*frames[2], calFreq.shape[0]]) # Keep track of actual microwave freq
 
@@ -144,13 +146,26 @@ class ScanManager(QtCore.QThread):
 						motorPos = self.motor.updatePosition()
 						self.motorPosUpdateSig.emit(motorPos)
 						return
-					# Signal all devices to start new acquisition
-					for dev in self.sequentialAcqList:
-						dev.continueEvent.set()
-					# Synchronization... wait for all the device threads to complete
-					for dev in self.sequentialAcqList:
-						dev.completeEvent.wait()
-						dev.completeEvent.clear()
+					# Check if 1st frame or distX > half image size (FLIR camera), if so, take new widefield image
+					if np.abs(distX) > 0.5*imageSize or k == 0:
+						#print('Taking FLIR camera image! distX =', distX)
+						# Signal all devices to start new acquisition
+						for dev in self.sequentialAcqList + self.partialAcqList:
+							dev.continueEvent.set()
+						# synchronization... wait for all the device threads to complete
+						for dev in self.sequentialAcqList + self.partialAcqList:
+							dev.completeEvent.wait()
+							dev.completeEvent.clear()
+						# Reset distX to 0 (relative) distance
+						distX = 0.0
+					else:
+						# Signal all devices to start new acquisition
+						for dev in self.sequentialAcqList:
+							dev.continueEvent.set()
+						# Synchronization... wait for all the device threads to complete
+						for dev in self.sequentialAcqList:
+							dev.completeEvent.wait()
+							dev.completeEvent.clear()
 					# Send motor position signal to update GUI
 					motorPos = self.motor.updatePosition()
 					#print('motorPos =', motorPos)
@@ -160,6 +175,7 @@ class ScanManager(QtCore.QThread):
 					if k < frames[0]-1:
 						if step[0] > 0:
 							self.motor.moveRelative('x', step[0])
+							distX += step[0]
 					else:
 						# take calibration data at end of line
 						self.shutter.setShutterState((0, 1)) # switch to reference arm
@@ -170,10 +186,10 @@ class ScanManager(QtCore.QThread):
 							time.sleep(0.01)
 							calFreqRead[i*frames[1] + j, idx] = self.synth.getFreq()
 							# Signal all devices to start new acquisition
-							for dev in self.sequentialAcqList + self.partialAcqList:
+							for dev in self.sequentialAcqList:
 								dev.continueEvent.set()
 							# synchronization... wait for all the device threads to complete
-							for dev in self.sequentialAcqList + self.partialAcqList:
+							for dev in self.sequentialAcqList:
 								dev.completeEvent.wait()
 								dev.completeEvent.clear()
 						# return to start position after end of line
@@ -181,6 +197,7 @@ class ScanManager(QtCore.QThread):
 						if step[0] > 0:
 							for m in range(frames[0]-1):
 								self.motor.moveRelative('x', -step[0])
+						distX = 0.0 # reset relative x-distance tracker to zero
 						#self.motor.moveRelative('x', 2.8125) # forward backlash correction
 						# return to sample arm
 						self.shutter.setShutterState((1, 0))
@@ -257,7 +274,7 @@ class ScanManager(QtCore.QThread):
 		#print("[ScanManager] delete unneeded frames processing time = %.3f s" % (endTime - startTime))
 		#startTime = timer()
 		# Save one CMOS image per calibration step (the 2nd one)
-		CMOSImage = CMOSImage[1::calFrames]
+		#CMOSImage = CMOSImage[1::calFrames]
 		endTime = timer()
 		#print("[ScanManager] choose 2nd frames processing time = %.3f s" % (endTime - startTime))
 		volumeScan.CMOSImage = CMOSImage
