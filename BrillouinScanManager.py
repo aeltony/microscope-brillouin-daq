@@ -112,6 +112,7 @@ class ScanManager(QtCore.QThread):
 		calFreq = self.scanSettings['calFreq']
 		imageSize = 9000.0/self.scanSettings['magnification'] # FLIR camera has 4.5 um/px, cropped to 2000 px
 		distX = 0.0 # Keep track of relative dist travelled in x-direction w.r.t imageSize to capture full field with FLIR camera
+		partialAcqNum = 0 # Keep track of number of FLIR camera images acquired
 		motorCoords = np.empty([frames[0]*frames[1]*frames[2],3]) # Keep track of coordinates
 		calFreqRead = np.empty([frames[1]*frames[2], calFreq.shape[0]]) # Keep track of actual microwave freq
 
@@ -147,7 +148,7 @@ class ScanManager(QtCore.QThread):
 						self.motorPosUpdateSig.emit(motorPos)
 						return
 					# Check if 1st frame or distX > half image size (FLIR camera), if so, take new widefield image
-					if np.abs(distX) > 0.5*imageSize or k == 0:
+					if np.abs(distX) >= 0.5*imageSize or k == 0:
 						#print('Taking FLIR camera image! distX =', distX)
 						# Signal all devices to start new acquisition
 						for dev in self.sequentialAcqList + self.partialAcqList:
@@ -158,6 +159,8 @@ class ScanManager(QtCore.QThread):
 							dev.completeEvent.clear()
 						# Reset distX to 0 (relative) distance
 						distX = 0.0
+						# Increment count of FLIR images acquired
+						partialAcqNum += 1
 					else:
 						# Signal all devices to start new acquisition
 						for dev in self.sequentialAcqList:
@@ -244,7 +247,7 @@ class ScanManager(QtCore.QThread):
 				data = devProcessor.processedData.get()	# data[0] is a counter
 				dataset[dev.deviceName].append(data[1])
 		for (dev, devProcessor) in zip(self.partialAcqList, self.partialProcessingList):
-			while devProcessor.processedData.qsize() > calFrames*frames[1]*frames[2]:
+			while devProcessor.processedData.qsize() > partialAcqNum:
 				devProcessor.processedData.get() # pop out the first few sets of data stored before scan started
 			while not devProcessor.processedData.empty():
 				data = devProcessor.processedData.get()	# data[0] is a counter

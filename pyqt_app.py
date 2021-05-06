@@ -111,7 +111,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             ]},
             {'name': 'Spectrometer Camera', 'type': 'group', 'children': [
                 {'name': 'Background Subtraction', 'type':'toggle', 'ButtonText':('Turn on background subtraction', 'Turn off background subtraction')},
-                {'name': 'Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.01, 'limits':(0.001, 10)},
+                {'name': 'Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.01, 'limits':(0.001, 60)},
                 {'name': 'Ref. Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.01, 'limits':(0.001, 10)},
                 {'name': 'AutoExposure', 'type':'toggle', 'ButtonText':('Auto exposure', 'Fixed exposure')},         #False=Fixed exposure
                 {'name': 'Spectrum Column', 'type':'int', 'value': spectColumn, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
@@ -248,7 +248,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
         # sampleScanDepthPlot is the Brillouin vs z axis plot
         self.sampleScanDepthPlot = pg.PlotItem()
-        self.sampleScanDepthPlot.setYRange(4.8,5.9)
+        self.sampleScanDepthPlot.setYRange(4.95,5.95)
         self.graphicsViewSampleScanDepth.setCentralItem(self.sampleScanDepthPlot)
         self.sampleScanDepthPlot.enableAutoRange(axis=self.sampleScanDepthPlot.vb.XAxis, enable=True)
         self.sampleScanDepthItem = pg.PlotDataItem() 

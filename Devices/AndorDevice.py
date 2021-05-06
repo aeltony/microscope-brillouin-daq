@@ -48,7 +48,7 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         self.cam.SetPixelEncoding(u'Mono32')
         self.cam.SetHBin(1)
         self.cam.SetVBin(1)
-        self.cam.SetWidth(49)
+        self.cam.SetWidth(50)
         self.cam.SetAOILeft(942)
         self.cam.SetHeight(210)
         self.cam.SetAOITop(1064)
@@ -92,7 +92,7 @@ class AndorDevice(Devices.BrillouinDevice.Device):
                     self.cam.StartAcquisition()
                 except:
                     print('[AndorDevice] Timed out while waiting for frame')
-                    im_arr = np.zeros(49*210)
+                    im_arr = np.zeros(50*210)
                     return im_arr
                 self.cam.GetAcquiredData2(self.imageBufferPointer)
             #expTime = self.getExposure()
@@ -226,11 +226,11 @@ class AndorProcessFreerun(Devices.BrillouinDevice.DeviceProcess):
 
     def __init__(self, device, stopProcessingEvent, finishedTrigger = None):
         super(AndorProcessFreerun, self).__init__(device, stopProcessingEvent, finishedTrigger)
-        self.binHeight = 7 # number of vertical pixels to bin, typ. 10
+        self.binHeight = 10 # number of vertical pixels to bin, typ. 10
 
     # data is an numpy array of type int32
     def doComputation(self, data):
-        proper_image = np.reshape(data, (-1, 49))   # 50 columns
+        proper_image = np.reshape(data, (-1, 50))   # 50 columns
         proper_image = np.rot90(proper_image, 1, (1,0)) # Rotate by 90 deg.
         # Perform software binning
         binned_image = proper_image.reshape(-1, self.binHeight, proper_image.shape[-1]).sum(1)

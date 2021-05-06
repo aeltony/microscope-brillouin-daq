@@ -50,9 +50,12 @@ class MakoDevice(Devices.BrillouinDevice.Device):
             self.camera.ExposureTime.SetValue(20000) # us
             self.camera.GainAuto.SetValue(PySpin.GainAuto_Off)
             self.camera.Gain.SetValue(0) # dB
+            self.camera.GammaEnable.SetValue(False)
             self.camera.AcquisitionFrameRateEnable.SetValue(True)
             self.camera.AcquisitionFrameRate.SetValue(5) # Hz
             self.camera.AcquisitionMode.SetValue(1) # 0 = Continuous, 1 = Single Frame
+            self.camera.PixelFormat.SetValue(PySpin.PixelFormat_Mono16)
+            self.camera.AdcBitDepth.SetValue(PySpin.AdcBitDepth_Bit12)
         except PySpin.SpinnakerException as ex:
             print(str(ex))
         print('[MakoDevice] Set-up complete')
@@ -81,14 +84,14 @@ class MakoDevice(Devices.BrillouinDevice.Device):
                 print('[MakoDevice] Empty buffer when acquiring image')
                 imgData = np.zeros((self.imageWidth,self.imageHeight), dtype=int)
                 image_arr = np.ndarray(buffer = imgData,
-                                       dtype = np.uint8,
+                                       dtype = np.uint16,
                                        shape = (self.imageHeight,self.imageWidth))
                 return image_arr
             if self.image_result.IsIncomplete():
                 print('[MakoDevice] Image incomplete with image status %d ...' % self.image_result.GetImageStatus())
                 imgData = np.zeros((self.imageWidth,self.imageHeight), dtype=int)
                 image_arr = np.ndarray(buffer = imgData,
-                                       dtype = np.uint8,
+                                       dtype = np.uint16,
                                        shape = (self.imageHeight,self.imageWidth))
                 return image_arr
             else:
@@ -96,7 +99,7 @@ class MakoDevice(Devices.BrillouinDevice.Device):
                 height = self.image_result.GetHeight()
                 #print('[MakoDevice] Grabbed Image with width = %d, height = %d' % (width, height))
             image_arr = np.ndarray(buffer = self.image_result.GetNDArray(),
-                            dtype = np.uint8,
+                            dtype = np.uint16,
                             shape = (height,width))
             self.image_result.Release()
             self.camera.EndAcquisition()
