@@ -59,10 +59,10 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.maxRowPoints = 20 # Number of pixels per row in freerunning Brillouin map
         self.maxColPoints = 20 # Number of pixels per column in freerunning Brillouin map
         self.calPoints = 0 # Number of calibration points (used when scanning)
-        laserX = self.configParser.getint('Scan', 'laser_position_x')
-        laserY = self.configParser.getint('Scan', 'laser_position_y')
-        FSR = self.configParser.getfloat('Scan', 'FSR')
-        SD = self.configParser.getfloat('Scan', 'SD')
+        laserX = self.configParser.getint('Other', 'laser_position_x')
+        laserY = self.configParser.getint('Other', 'laser_position_y')
+        FSR = self.configParser.getfloat('Other', 'FSR')
+        SD = self.configParser.getfloat('Other', 'SD')
         RFpower = self.configParser.getfloat('Synth', 'RF_power')
         spectColumn = self.configParser.getint('Andor', 'spect_column')
         spectRow = self.configParser.getint('Andor', 'spect_row')
@@ -77,15 +77,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
                     {'name': 'X', 'type': 'int', 'value': 5, 'step': 1, 'limits':(1,2000)},
                     {'name': 'Y', 'type': 'int', 'value': 5, 'step': 1, 'limits':(1,2000)},
                     {'name': 'Z', 'type': 'int', 'value': 5, 'step': 1, 'limits':(1,2000)}]},
-                {'name': 'Ambient Temp.', 'type': 'float', 'value': 0.0, 'suffix':' deg. C', 'readonly':True, 'decimals':4},
-                {'name': 'FSR', 'type': 'float', 'value': FSR, 'suffix':' GHz', 'limits':(5, 100), 'decimals':5},
-                {'name': 'SD', 'type': 'float', 'value': SD, 'suffix':' GHz/px', 'limits':(0, 2), 'decimals':4},
                 {'name': 'ToggleReference', 'type':'toggle', 'ButtonText':('Switch to Reference', 'Switch to Sample')},         #False=Sample="Switch to Ref"
-                {'name': 'Scan/Cancel', 'type': 'action2', 'ButtonText':('Scan', 'Cancel')},
-                {'name': 'More Settings', 'type': 'group', 'children': [
-                    {'name': 'Laser Focus X', 'type': 'int', 'value': laserX, 'suffix':' px', 'limits':(-10000,10000),'decimals':4},
-                    {'name': 'Laser Focus Y', 'type': 'int', 'value': laserY, 'suffix':' px', 'limits':(-10000,10000),'decimals':4}
-                ]}
+                {'name': 'Scan/Cancel', 'type': 'action2', 'ButtonText':('Scan', 'Cancel')}
             ]},
             {'name': 'Display', 'type': 'group', 'children': [
                 {'name': 'Colormap (min.)', 'type': 'float', 'value': 5.58, 'suffix':' GHz', 'step': 0.01, 'limits':(0.0, 22.0), 'decimals':3},
@@ -102,6 +95,20 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
                 {'name': 'Move to location', 'type': 'float', 'value':0, 'suffix':' um', 'limits':(0, 100000), 'decimals':5},
                 {'name': 'Move', 'type':'action3', 'ButtonText':('Move X', 'Move Y', 'Move Z')}
             ]},
+            {'name': 'Spectrometer Camera', 'type': 'group', 'children': [
+                {'name': 'Background Subtraction', 'type':'toggle', 'ButtonText':('Turn on background subtraction', 'Turn off background subtraction')},
+                {'name': 'Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.01, 'limits':(0.001, 60)},
+                {'name': 'Ref. Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.01, 'limits':(0.001, 10)},
+                #{'name': 'AutoExposure', 'type':'toggle', 'ButtonText':('Auto exposure', 'Fixed exposure')},         #False=Fixed exposure
+                {'name': 'Spectrum Column', 'type':'int', 'value': spectColumn, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
+                {'name': 'Spectrum Row', 'type':'int', 'value': spectRow, 'suffix':' px', 'step':1, 'limits':(0, 2048)}
+                #{'name': 'Camera Temp.', 'type': 'float', 'value':0, 'suffix':' C', 'readonly': True}
+            ]},        
+            {'name': 'Microscope Camera', 'type': 'group', 'children': [
+                {'name': 'Exposure Time', 'type': 'float', 'value': 20, 'suffix':' ms', 'limits':(0.001, 10000)},
+                {'name': 'Frame Rate', 'type': 'int', 'value': 5, 'suffix':' Hz', 'limits':(1, 20)},
+                {'name': 'Magnification', 'type': 'float', 'value': 20, 'suffix':' X', 'limits':(0.01, 200)}
+            ]},
             {'name': 'Microwave Source', 'type': 'group', 'children': [
                 {'name': 'RF Frequency', 'type': 'float', 'value': 5.75, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
                 {'name': 'RF Power', 'type': 'float', 'value': RFpower, 'suffix':' dBm', 'step': 0.1, 'limits': (-20, 10), 'decimals':2},
@@ -109,19 +116,14 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
                 {'name': 'Cal. Freq (max.)', 'type': 'float', 'value': 5.82, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
                 {'name': 'Cal. Freq (step)', 'type': 'float', 'value': 0.08, 'suffix':' GHz', 'step': 0.001, 'limits': (0.001, 13.0), 'decimals':3}
             ]},
-            {'name': 'Spectrometer Camera', 'type': 'group', 'children': [
-                {'name': 'Background Subtraction', 'type':'toggle', 'ButtonText':('Turn on background subtraction', 'Turn off background subtraction')},
-                {'name': 'Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.01, 'limits':(0.001, 60)},
-                {'name': 'Ref. Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.01, 'limits':(0.001, 10)},
-                {'name': 'AutoExposure', 'type':'toggle', 'ButtonText':('Auto exposure', 'Fixed exposure')},         #False=Fixed exposure
-                {'name': 'Spectrum Column', 'type':'int', 'value': spectColumn, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
-                {'name': 'Spectrum Row', 'type':'int', 'value': spectRow, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
-                {'name': 'Camera Temp.', 'type': 'float', 'value':0, 'suffix':' C', 'readonly': True}
-            ]},        
-            {'name': 'Microscope Camera', 'type': 'group', 'children': [
-                {'name': 'Exposure Time', 'type': 'float', 'value': 20, 'suffix':' ms', 'limits':(0.001, 10000)},
-                {'name': 'Frame Rate', 'type': 'int', 'value': 5, 'suffix':' Hz', 'limits':(1, 20)},
-                {'name': 'Magnification', 'type': 'float', 'value': 20, 'suffix':' X', 'limits':(0.01, 200)}
+            {'name': 'Other', 'type': 'group', 'children': [
+                {'name': 'Ambient Temp.', 'type': 'float', 'value': 0.0, 'suffix':' deg. C', 'readonly':True, 'decimals':4},
+                {'name': 'FSR', 'type': 'float', 'value': FSR, 'suffix':' GHz', 'limits':(5, 100), 'decimals':5},
+                {'name': 'SD', 'type': 'float', 'value': SD, 'suffix':' GHz/px', 'limits':(0, 2), 'decimals':4},
+                {'name': 'More Settings', 'type': 'group', 'children': [
+                    {'name': 'Laser Focus X', 'type': 'int', 'value': laserX, 'suffix':' px', 'limits':(-10000,10000),'decimals':4},
+                    {'name': 'Laser Focus Y', 'type': 'int', 'value': laserY, 'suffix':' px', 'limits':(-10000,10000),'decimals':4}
+                ]}
             ]}
         ]
         ## Create tree of Parameter objects
@@ -215,7 +217,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.SampleView = CustomViewBox(invertY=True)
         self.graphicsViewSample.setCentralItem(self.SampleView)
         self.SampleView.setAspectLocked(True)
-        self.SampleImage = pg.ImageItem(np.zeros((850, 200)))
+        self.SampleImage = pg.ImageItem(np.zeros((860, 200)))
         self.SampleView.addItem(self.SampleImage)
         self.SampleView.autoRange(padding=0)
 
@@ -223,7 +225,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.BinnedView = CustomViewBox(invertY=True)
         self.graphicsViewBinned.setCentralItem(self.BinnedView)
         self.BinnedView.setAspectLocked(True)
-        self.BinnedImage = pg.ImageItem(np.zeros((105, 420)))
+        self.BinnedImage = pg.ImageItem(np.zeros((440, 100)))
         self.BinnedView.addItem(self.BinnedImage)
         self.BinnedView.autoRange(padding=0)
 
@@ -306,16 +308,16 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         # ========================= Spectrometer Camera =============================
         pItem = self.allParameters.child('Spectrometer Camera')
         pItem.child('Background Subtraction').sigActivated.connect(self.bgSubtraction)
-        pItem.child('AutoExposure').sigActivated.connect(self.switchAutoExp)
+        #pItem.child('AutoExposure').sigActivated.connect(self.switchAutoExp)
         pItem.child('Exposure').sigValueChanged.connect(
             lambda data: self.changeHardwareSetting(data, self.AndorDeviceThread.setExposure))
         pItem.child('Exposure').setValue(self.AndorDeviceThread.getExposure())
-        pItem.child('Camera Temp.').setValue(self.AndorDeviceThread.getTemperature())
+        #pItem.child('Camera Temp.').setValue(self.AndorDeviceThread.getTemperature())
         # Spectrum Column / Row adjustment
         pItem.child('Spectrum Column').sigValueChanged.connect(self.spectColumnValueChange)
         pItem.child('Spectrum Row').sigValueChanged.connect(self.spectRowValueChange)
 
-        # ========================= Monitor Camera ==================================
+        # ========================= Brightfield Camera ==================================
         pItem = self.allParameters.child('Microscope Camera')
         pItem.child('Exposure Time').sigValueChanged.connect(
             lambda data: self.changeHardwareSetting(data, self.MakoDeviceThread.setExpTime))
@@ -376,6 +378,9 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         pItem.child('Scan/Cancel').sigActivated.connect(self.startScan)
         pItem.child('Scan/Cancel').sigActivated2.connect(self.cancelScan)
         pItem.child('ToggleReference').sigActivated.connect(self.toggleReference)
+
+        # ========================= Other ===========================================
+        pItem = self.allParameters.child('Other')
         pItem.child('FSR').sigValueChanged.connect(self.FSRValueChange)
         pItem.child('SD').sigValueChanged.connect(self.SDValueChange)
         # Laser crosshair adjustment
@@ -386,9 +391,9 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
         # ========================= Hardware monitor timers ========================
 
-        self.hardwareGetTimer = QTimer()
-        self.hardwareGetTimer.timeout.connect(self.HardwareParamUpdate)
-        self.hardwareGetTimer.start(600000)
+        #self.hardwareGetTimer = QTimer()
+        #self.hardwareGetTimer.timeout.connect(self.HardwareParamUpdate)
+        #self.hardwareGetTimer.start(600000)
 
         # Separate timer for motor position, update at faster rate
         self.motorPositionTimer = QTimer()
@@ -399,13 +404,13 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         # print("[changeHardwareSetting]")
         funcHandle(data.value())
 
-    def HardwareParamUpdate(self):
-        #print("[HardwareParamUpdate]")
-        try:
-            temp = self.AndorDeviceThread.getTemperature()
-            self.allParameters.child('Spectrometer Camera').child('Camera Temp.').setValue(temp)
-        except:
-            print('Could not update AndorDevice temperature')
+    #def HardwareParamUpdate(self):
+    #    #print("[HardwareParamUpdate]")
+    #    try:
+    #        temp = self.AndorDeviceThread.getTemperature()
+    #        self.allParameters.child('Spectrometer Camera').child('Camera Temp.').setValue(temp)
+    #    except:
+    #        print('Could not update AndorDevice temperature')
 
     @QtCore.pyqtSlot(list)
     def MotorPositionUpdate2(self, pos):
@@ -424,14 +429,14 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
     def CMOShLineValueChange(self, param, value):
         # print("[CMOShLineValueChange]")
         self.CMOShLine.setPos(value)
-        self.configParser.set('Scan', 'laser_position_y', str(int(value)))
+        self.configParser.set('Other', 'laser_position_y', str(int(value)))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 
     def CMOSvLineValueChange(self, param, value):
         # print("[CMOSvLineValueChange]")
         self.CMOSvLine.setPos(value)
-        self.configParser.set('Scan', 'laser_position_x', str(int(value)))
+        self.configParser.set('Other', 'laser_position_x', str(int(value)))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 
@@ -452,12 +457,12 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             self.configParser.write(f)
 
     def FSRValueChange(self, param, value):
-        self.configParser.set('Scan', 'FSR', str(value))
+        self.configParser.set('Other', 'FSR', str(value))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 
     def SDValueChange(self, param, value):
-        self.configParser.set('Scan', 'SD', str(value))
+        self.configParser.set('Other', 'SD', str(value))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 
@@ -515,8 +520,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             'frames': frameNumArr,
             'calFreq': calFreq,
             'magnification': magnification,
-            'laserX': self.allParameters.child('Scan').child('More Settings').child('Laser Focus X').value(),
-            'laserY': self.allParameters.child('Scan').child('More Settings').child('Laser Focus Y').value(),
+            'laserX': self.allParameters.child('Other').child('More Settings').child('Laser Focus X').value(),
+            'laserY': self.allParameters.child('Other').child('More Settings').child('Laser Focus Y').value(),
             'refExp': self.allParameters.child('Spectrometer Camera').child('Ref. Exposure').value(),
             'sampleExp': self.allParameters.child('Spectrometer Camera').child('Exposure').value(),
             'screenshot': screenshotArr,
@@ -536,7 +541,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.BrillouinScan.saveExpIndex = self.model.activeExperiment
 
         # Stop periodic polling of hardware state
-        self.hardwareGetTimer.stop()
+        #self.hardwareGetTimer.stop()
         self.motorPositionTimer.stop()
         self.BrillouinScan.motorPosUpdateSig.connect(self.MotorPositionUpdate2)
 
@@ -567,11 +572,11 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             SD = self.BrillouinScan.SDcal
             FSR = self.BrillouinScan.FSRcal
             if ~np.isnan(SD):
-                self.allParameters.child('Scan').child('SD').setValue(SD)
+                self.allParameters.child('Other').child('SD').setValue(SD)
             if ~np.isnan(FSR):
-                self.allParameters.child('Scan').child('FSR').setValue(FSR)
+                self.allParameters.child('Other').child('FSR').setValue(FSR)
         self.BrillouinScan.motorPosUpdateSig.disconnect(self.MotorPositionUpdate2)
-        self.hardwareGetTimer.start(60000)
+        #self.hardwareGetTimer.start(60000)
         self.motorPositionTimer.start(500)
         self.BrillouinScan.Cancel_Flag = False
         print('Scan completed')
@@ -602,15 +607,15 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             self.AndorDeviceThread.stopBGsubtraction()
             print("Spectrometer background subtraction OFF")
 
-    def switchAutoExp(self, sliderParam, state):
-        if state:
-            self.AndorDeviceThread.setAutoExp(True)
-            print("Spectrometer auto exposure ON")
-        else:
-            self.AndorDeviceThread.setAutoExp(False)
-            self.AndorDeviceThread.setExposure(self.allParameters.child('Spectrometer Camera').child('Exposure').value())
-            print("Spectrometer auto exposure OFF")
-            # self.AndorDeviceThread.setExposure(self.allParameters.child('Spectrometer Camera').child('Exposure').value())
+    #def switchAutoExp(self, sliderParam, state):
+    #    if state:
+    #        self.AndorDeviceThread.setAutoExp(True)
+    #        print("Spectrometer auto exposure ON")
+    #    else:
+    #        self.AndorDeviceThread.setAutoExp(False)
+    #        self.AndorDeviceThread.setExposure(self.allParameters.child('Spectrometer Camera').child('Exposure').value())
+    #        print("Spectrometer auto exposure OFF")
+    #        # self.AndorDeviceThread.setExposure(self.allParameters.child('Spectrometer Camera').child('Exposure').value())
 
     #############################################################################################
     # This next group of methods callback methods to display acquired data #
@@ -618,13 +623,13 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
     
     def UpdateAmbientTemp(self, temperature):
         # print('UpdateAmbientTemp')
-        self.allParameters.child('Scan').child('Ambient Temp.').setValue(temperature)
+        self.allParameters.child('Other').child('Ambient Temp.').setValue(temperature)
 
     # updates the figure containing the Brillouin sequence. newData is a list
     def UpdateSampleBrillouinSeqPlot(self, interPeakDist):
         # print("[UpdateBrillouinSeqPlot]")
-        SD = self.allParameters.child('Scan').child('SD').value()
-        FSR = self.allParameters.child('Scan').child('FSR').value()
+        SD = self.allParameters.child('Other').child('SD').value()
+        FSR = self.allParameters.child('Other').child('FSR').value()
         if ~np.isnan(interPeakDist):
             newData = [0.5*(FSR - SD*interPeakDist)]
             newData2 = newData
@@ -707,7 +712,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
     # Update binned Andor image
     def AndorBinnedProcessUpdate(self, image):
         # print("[AndorProcessUpdate]")
-        self.BinnedImage.setImage(image)
+        self.BinnedImage.setImage(image.transpose((1,0)))
 
     # Update the CMOS camera image
     def MakoProcessUpdate(self, makoData):
@@ -755,7 +760,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         if self.dataFile:
             self.dataFile.close()
 
-        self.hardwareGetTimer.stop()
+        #self.hardwareGetTimer.stop()
         self.motorPositionTimer.stop()
 
         self.stop_event.set()
