@@ -246,9 +246,9 @@ class AndorProcessFreerun(Devices.BrillouinDevice.DeviceProcess):
         scaled_binned = scaled_binned.astype(int)
         binned_8bit = np.array(scaled_binned, dtype = np.uint8)
         # Resize images to fit GUI window
-        image = cv2.resize(scaled_8bit, (0,0), fx=850/scaled_8bit.shape[1], fy=200/scaled_8bit.shape[0], \
+        image = cv2.resize(scaled_8bit, (0,0), fx=860/scaled_8bit.shape[1], fy=200/scaled_8bit.shape[0], \
             interpolation = cv2.INTER_NEAREST)
-        binned = cv2.resize(binned_8bit, (0,0), fx=420/binned_8bit.shape[1], fy=105/binned_8bit.shape[0], \
+        binned = cv2.resize(binned_8bit, (0,0), fx=440/binned_8bit.shape[1], fy=100/binned_8bit.shape[0], \
             interpolation = cv2.INTER_NEAREST)
 
         #### Fitting Brillouin spectrum

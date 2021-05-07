@@ -1367,6 +1367,7 @@
     <Content Include="qt_ui_no_data_viewer.ui" />
     <Content Include="qt_ui_simplified.ui" />
     <Content Include="qt_ui_single_spectrum.ui" />
+    <Content Include="qt_ui_square.ui" />
     <Content Include="qt_ui_tabbed.ui" />
     <Content Include="Utilities\colormap.txt" />
   </ItemGroup>
