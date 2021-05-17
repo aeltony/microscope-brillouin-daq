@@ -81,7 +81,7 @@ class ScanManager(QtCore.QThread):
 		self.sequentialAcqList[0].forceSetExposure(self.scanSettings['sampleExp'])
 		self.sequentialAcqList[0].pauseBGsubtraction(False)
 
-		print("[ScanManager/run] Start")
+		#print("[ScanManager/run] Start")
 
 		# first turn off free running mode
 		for dev in self.sequentialAcqList + self.partialAcqList:
@@ -112,11 +112,14 @@ class ScanManager(QtCore.QThread):
 		calFreq = self.scanSettings['calFreq']
 		imageSize = 9000.0/self.scanSettings['magnification'] # FLIR camera has 4.5 um/px, cropped to 2000 px
 		distX = 0.0 # Keep track of relative dist travelled in x-direction w.r.t imageSize to capture full field with FLIR camera
+		distY = 0.0
+		indices = np.array([]).astype(int)
 		partialAcqNum = 0 # Keep track of number of FLIR camera images acquired
 		motorCoords = np.empty([frames[0]*frames[1]*frames[2],3]) # Keep track of coordinates
 		calFreqRead = np.empty([frames[1]*frames[2], calFreq.shape[0]]) # Keep track of actual microwave freq
 
 		for i in range(frames[2]):
+			print('Frame %d of %d' %(i+1, frames[2]))
 			for j in range(frames[1]):
 				for k in range(frames[0]):
 					#print('i,j,k = %d %d %d' % (i,j,k))
@@ -147,9 +150,8 @@ class ScanManager(QtCore.QThread):
 						motorPos = self.motor.updatePosition()
 						self.motorPosUpdateSig.emit(motorPos)
 						return
-					# Check if 1st frame or distX > half image size (FLIR camera), if so, take new widefield image
+					# Check if 1st X step or distX > half image size (FLIR camera), if so, take new widefield image
 					if np.abs(distX) >= 0.5*imageSize or k == 0:
-						#print('Taking FLIR camera image! distX =', distX)
 						# Signal all devices to start new acquisition
 						for dev in self.sequentialAcqList + self.partialAcqList:
 							dev.continueEvent.set()
@@ -159,6 +161,9 @@ class ScanManager(QtCore.QThread):
 							dev.completeEvent.clear()
 						# Reset distX to 0 (relative) distance
 						distX = 0.0
+						# Check if 1st Y step or distY > half image size (FLIR camera), if so save index
+						if np.abs(distY) >= 0.5*imageSize or j == 0:
+							indices = np.append(indices, partialAcqNum)
 						# Increment count of FLIR images acquired
 						partialAcqNum += 1
 					else:
@@ -209,12 +214,17 @@ class ScanManager(QtCore.QThread):
 				if j < frames[1]-1:
 					if step[1] > 0:
 						self.motor.moveRelative('y', step[1])
+						# reset distance tracker if just saved indices
+						if np.abs(distY) >= 0.5*imageSize:
+							distY = 0.0
+						distY += step[1]
 				else:
 					# return to start position after end of line
 					#self.motor.moveRelative('y', -2.8125) # reverse backlash correction
 					if step[1] > 0:
 						for n in range(frames[1]-1):
 							self.motor.moveRelative('y', -step[1])
+					distY = 0.0
 					#self.motor.moveRelative('y', 2.8125) # forward backlash correction
 			if i < frames[2]-1:
 				if step[2] > 0:
@@ -265,7 +275,7 @@ class ScanManager(QtCore.QThread):
 		CMOSImage = np.array(dataset['Mako'])
 		volumeScan.SpecList = np.array([d[1] for d in dataset['Andor']])
 		calPeakDist = np.array([d[2] for d in dataset['Andor']])
-		endTime = timer()
+		#endTime = timer()
 		#print("[ScanManager] make data arrays processing time = %.3f s" % (endTime - startTime))
 		# Free up memory used by dataset
 		del dataset
@@ -273,14 +283,9 @@ class ScanManager(QtCore.QThread):
 		# Separate sample and reference frames
 		for i in range(frames[0],0,-1):
 			calPeakDist = np.delete(calPeakDist, np.s_[::i+calFrames], 0)
-		endTime = timer()
+		#endTime = timer()
 		#print("[ScanManager] delete unneeded frames processing time = %.3f s" % (endTime - startTime))
-		#startTime = timer()
-		# Save one CMOS image per calibration step (the 2nd one)
-		#CMOSImage = CMOSImage[1::calFrames]
-		endTime = timer()
-		#print("[ScanManager] choose 2nd frames processing time = %.3f s" % (endTime - startTime))
-		volumeScan.CMOSImage = CMOSImage
+		volumeScan.CMOSImage = CMOSImage[indices] # Only save one CMOS image every 1/2 imageSize in Y
 		volumeScan.MotorCoords = motorCoords
 		volumeScan.Screenshot = self.scanSettings['screenshot']
 		volumeScan.flattenedParamList = self.scanSettings['flattenedParamList']	#save all GUI paramaters
