@@ -27,7 +27,7 @@ class AndorDevice(Devices.BrillouinDevice.Device):
 
         # buffer for Andor DLL image acquisition
         c_int32_p = POINTER(c_int32)
-        self.imageBuffer = np.array([0 for i in range(self.cam.width*self.cam.height*2)])
+        self.imageBuffer = np.zeros(self.cam.width*self.cam.height) #np.array([0 for i in range(self.cam.width*self.cam.height*2)])
         self.imageBuffer = self.imageBuffer.astype(np.int32)
         self.imageBufferPointer = self.imageBuffer.ctypes.data_as(c_int32_p)
 
@@ -89,12 +89,33 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         else:
             with self.andor_lock:
                 try:
-                    self.cam.StartAcquisition()
+                    errorStr = self.cam.StartAcquisition()
+                    if errorStr != 'AT_SUCCESS':
+                        print('[AndorDevice] Acquisition failed')
+                        if errorStr == 'Restarted camera':
+                            # Try again after restart
+                            errorStr = self.cam.StartAcquisition()
+                            if errorStr != 'AT_SUCCESS':
+                                print('[AndorDevice] Acquisition failed twice')
+                                im_arr = np.ones(self.cam.width*self.cam.height)
+                                return im_arr
+                        else:
+                            im_arr = np.ones(self.cam.width*self.cam.height)
+                            return im_arr
                 except:
-                    print('[AndorDevice] Timed out while waiting for frame')
-                    im_arr = np.zeros(50*210)
+                    print('[AndorDevice] Acquisition failed')
+                    im_arr = np.ones(self.cam.width*self.cam.height)
                     return im_arr
-                self.cam.GetAcquiredData2(self.imageBufferPointer)
+                try:
+                    errorStr = self.cam.GetAcquiredData2(self.imageBufferPointer)
+                    if errorStr != 'AT_SUCCESS':
+                        print('[AndorDevice] Could not get acquired data')
+                        im_arr = np.ones(self.cam.width*self.cam.height)
+                        return im_arr
+                except:
+                    print('[AndorDevice] Could not get acquired data')
+                    im_arr = np.ones(self.cam.width*self.cam.height)
+                    return im_arr
             #expTime = self.getExposure()
             imageSize = int(self.cam.GetAcquiredDataDim())
             # return a copy of the data, since the buffer is reused for next frame
