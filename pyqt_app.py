@@ -651,6 +651,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         # state == True --> Fluorescence
         # state == False --> Brightfield
         if state:
+            # Switch to filter index 2:
+            self.ZaberDevice.moveFilter(2)
             # Turn off Brightfield lamp, turn on fluorescence lamps
             self.ZaberDevice.lightSwitch('white', True)
             self.ZaberDevice.lightSwitch('blue', True)
@@ -658,9 +660,9 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             self.ZaberDevice.lightSwitch('trans', False)
             # Change Mako camera exposure time
             self.MakoDeviceThread.setExpTime(self.allParameters.child('Microscope Camera').child('Fluoresc. Exp.').value())
-            # Switch to filter index 2:
-            self.ZaberDevice.moveFilter(2)
         else:
+            # Switch to filter index 1:
+            self.ZaberDevice.moveFilter(1)
             # Turn on Brightfield lamp, turn off fluorescence lamps
             self.ZaberDevice.lightSwitch('white', False)
             self.ZaberDevice.lightSwitch('blue', False)
@@ -668,8 +670,6 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             self.ZaberDevice.lightSwitch('trans', True)
             # Change Mako camera exposure time
             self.MakoDeviceThread.setExpTime(self.allParameters.child('Microscope Camera').child('Brightfield Exp.').value())
-            # Switch to filter index 1:
-            self.ZaberDevice.moveFilter(1)
 
     def bgSubtraction(self, sliderParam, state):
         if state:
