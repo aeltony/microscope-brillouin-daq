@@ -81,6 +81,14 @@ class ScanManager(QtCore.QThread):
 		self.sequentialAcqList[0].forceSetExposure(self.scanSettings['sampleExp'])
 		self.sequentialAcqList[0].pauseBGsubtraction(False)
 
+		# Switch to brightfield settings
+		self.motor.moveFilter(1)
+		self.motor.lightSwitch('white', False)
+		self.motor.lightSwitch('blue', False)
+		self.motor.lightSwitch('red', False)
+		self.motor.lightSwitch('trans', True)
+		self.partialAcqList[0].setExpTime(self.scanSettings['brightExp'])
+
 		#print("[ScanManager/run] Start")
 
 		# first turn off free running mode
@@ -170,6 +178,29 @@ class ScanManager(QtCore.QThread):
 							indices = np.append(indices, partialAcqNum)
 						# Increment count of FLIR images acquired
 						partialAcqNum += 1
+						# Check if fluorescence active, if so, take (only) fluorescence image
+						if takeFluorescence:
+							# Switch to fluorescence settings
+							self.motor.moveFilter(2)
+							self.motor.lightSwitch('white', True)
+							self.motor.lightSwitch('blue', True)
+							self.motor.lightSwitch('red', True)
+							self.motor.lightSwitch('trans', False)
+							self.partialAcqList[0].setExpTime(self.scanSettings['fluorExp'])
+							# Signal all devices to start new acquisition
+							for dev in self.partialAcqList:
+								dev.continueEvent.set()
+							# synchronization... wait for all the device threads to complete
+							for dev in self.partialAcqList:
+								dev.completeEvent.wait()
+								dev.completeEvent.clear()
+							# Switch back to brightfield settings
+							self.motor.moveFilter(1)
+							self.motor.lightSwitch('white', False)
+							self.motor.lightSwitch('blue', False)
+							self.motor.lightSwitch('red', False)
+							self.motor.lightSwitch('trans', True)
+							self.partialAcqList[0].setExpTime(self.scanSettings['brightExp'])
 					else:
 						# Signal all devices to start new acquisition
 						for dev in self.sequentialAcqList:
@@ -289,7 +320,14 @@ class ScanManager(QtCore.QThread):
 			calPeakDist = np.delete(calPeakDist, np.s_[::i+calFrames], 0)
 		#endTime = timer()
 		#print("[ScanManager] delete unneeded frames processing time = %.3f s" % (endTime - startTime))
-		volumeScan.CMOSImage = CMOSImage[indices] # Only save one CMOS image every 1/2 imageSize in Y
+		if takeFluorescence:
+			BrightfieldImage = CMOSImage[::2]
+			FluorescenceImage = CMOSImage[1::2]
+			volumeScan.BrightfieldImage = BrightfieldImage[indices] # Only save one CMOS image every 1/2 imageSize in Y
+			volumeScan.FluorescenceImage = FluorescenceImage[indices] # Only save one CMOS image every 1/2 imageSize in Y
+		else:
+			volumeScan.BrightfieldImage = CMOSImage[indices] # Only save one CMOS image every 1/2 imageSize in Y
+			volumeScan.FluorescenceImage = np.zeros(1)
 		volumeScan.MotorCoords = motorCoords
 		volumeScan.Screenshot = self.scanSettings['screenshot']
 		volumeScan.flattenedParamList = self.scanSettings['flattenedParamList']	#save all GUI paramaters
