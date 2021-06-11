@@ -107,6 +107,7 @@ class ScanManager(QtCore.QThread):
 		for dev in self.sequentialAcqList + self.partialAcqList:
 			dev.unpause()
 
+		takeFluorescence = self.scanSettings['takeFluorescence']
 		frames = self.scanSettings['frames']
 		step = self.scanSettings['step']
 		calFreq = self.scanSettings['calFreq']
@@ -117,6 +118,9 @@ class ScanManager(QtCore.QThread):
 		partialAcqNum = 0 # Keep track of number of FLIR camera images acquired
 		motorCoords = np.empty([frames[0]*frames[1]*frames[2],3]) # Keep track of coordinates
 		calFreqRead = np.empty([frames[1]*frames[2], calFreq.shape[0]]) # Keep track of actual microwave freq
+
+		if takeFluorescence:
+			print('[ScanManager] Acquiring fluorescence images...')
 
 		for i in range(frames[2]):
 			print('Frame %d of %d' %(i+1, frames[2]))

@@ -51,8 +51,8 @@ class MakoDevice(Devices.BrillouinDevice.Device):
             self.camera.GainAuto.SetValue(PySpin.GainAuto_Off)
             self.camera.Gain.SetValue(0) # dB
             self.camera.GammaEnable.SetValue(False)
-            self.camera.AcquisitionFrameRateEnable.SetValue(True)
-            self.camera.AcquisitionFrameRate.SetValue(5) # Hz
+            self.camera.AcquisitionFrameRateEnable.SetValue(False) # True for manual control
+            #self.camera.AcquisitionFrameRate.SetValue(3) # Hz
             self.camera.AcquisitionMode.SetValue(1) # 0 = Continuous, 1 = Single Frame
             self.camera.PixelFormat.SetValue(PySpin.PixelFormat_Mono16)
             self.camera.AdcBitDepth.SetValue(PySpin.AdcBitDepth_Bit12)
