@@ -20,8 +20,16 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         self.cam = Andor()
         self.cam.SetVerbose(False)
         self.cam.Initialize()
+
+        self.autoExp = False
+        self.bgSubtraction = False
+        self.refState = False
+        self.triggerBG = False
+        self.sampleExp = 0.1
+        self.refExp = 0.1
+        self.AOITop = 1111
+        self.AOILeft = 938
         self.set_up()
-        self.cam.CreateBuffer()
         self.andor_lock = app.andor_lock
         self.runMode = 0    #0 is free running, 1 is scan
 
@@ -30,11 +38,6 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         self.imageBuffer = np.zeros(self.cam.width*self.cam.height) #np.array([0 for i in range(self.cam.width*self.cam.height*2)])
         self.imageBuffer = self.imageBuffer.astype(np.int32)
         self.imageBufferPointer = self.imageBuffer.ctypes.data_as(c_int32_p)
-
-        self.autoExp = False
-        self.bgSubtraction = False
-        self.pauseBG = False
-        self.triggerBG = False
 
     # set up default parameters
     def set_up(self):
@@ -49,17 +52,20 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         self.cam.SetHBin(1)
         self.cam.SetVBin(1)
         self.cam.SetWidth(50)
-        self.cam.SetAOILeft(942)
+        self.cam.SetAOILeft(self.AOILeft)
         self.cam.SetHeight(210)
-        self.cam.SetAOITop(1064)
-        self.cam.SetExposureTime(.1)
+        self.cam.SetAOITop(self.AOITop)
+        if self.refState:
+            self.cam.SetExposureTime(self.refExp)
+        else:
+            self.cam.SetExposureTime(self.sampleExp)
         self.cam.SetCoolerMode(True)  # Continuous cooling
         self.cam.GetTemperature()
         while self.cam.temperature > 5:
             self.cam.GetTemperature()
             print("[AndorDevice] Camera cooling down, current T: %.2f C" % self.cam.temperature)
             time.sleep(1)
-
+        self.cam.CreateBuffer()
 
     def __del__(self):
         return 0
@@ -74,9 +80,8 @@ class AndorDevice(Devices.BrillouinDevice.Device):
     def stopBGsubtraction(self):
         self.bgSubtraction = False
 
-    def pauseBGsubtraction(self, pauseStatus):
-        self.pauseBG = pauseStatus
-        #print('Background subtraction pause status =', pauseStatus)
+    def setRefState(self, refStatus):
+        self.refState = refStatus
 
     # getData() acquires an image from Andor
     def getData(self):
@@ -91,19 +96,21 @@ class AndorDevice(Devices.BrillouinDevice.Device):
                 try:
                     errorStr = self.cam.StartAcquisition()
                     if errorStr != 'AT_SUCCESS':
-                        print('[AndorDevice] Acquisition failed')
                         if errorStr == 'Restarted camera':
+                            # Need to reset parameters
+                            self.set_up()
                             # Try again after restart
+                            print('[AndorDevice] Acquisition failed, trying again...')
                             errorStr = self.cam.StartAcquisition()
                             if errorStr != 'AT_SUCCESS':
-                                print('[AndorDevice] Acquisition failed twice')
+                                print('[AndorDevice] Acquisition failed twice!')
                                 im_arr = np.ones(self.cam.width*self.cam.height)
                                 return im_arr
                         else:
                             im_arr = np.ones(self.cam.width*self.cam.height)
                             return im_arr
                 except:
-                    print('[AndorDevice] Acquisition failed')
+                    print('[AndorDevice] Acquisition failed!')
                     im_arr = np.ones(self.cam.width*self.cam.height)
                     return im_arr
                 try:
@@ -120,7 +127,7 @@ class AndorDevice(Devices.BrillouinDevice.Device):
             imageSize = int(self.cam.GetAcquiredDataDim())
             # return a copy of the data, since the buffer is reused for next frame
             im_arr = np.array(self.imageBuffer[0:imageSize], copy=True, dtype = np.uint16)
-            if self.bgSubtraction and not self.pauseBG:
+            if self.bgSubtraction and not self.refState:
                 im_arr = im_arr - self.bgImage
         return im_arr
 
@@ -140,31 +147,30 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         bgImage = bgImgArr/5
         return bgImage
 
-    def getData2(self):
-        print("[Andor] getData2 begin")
-        testExpTime = .05
-        countsTarget = 15000.
-        self.cam.SetExposureTime(testExpTime)
-        with self.andor_lock:
-            self.cam.StartAcquisition()
-            self.cam.GetAcquiredData2(self.imageBufferPointer)
-        imageSize = int(self.cam.GetAcquiredDataDim())
-        testImage = np.array(self.imageBuffer[0:imageSize], copy=True, dtype = np.uint16)
-        maxCounts = np.amax(testImage)
-        print('maxCounts =', maxCounts)
-        adjustedExpTime = countsTarget*testExpTime/maxCounts
-        if adjustedExpTime > 2:
-            adjustedExpTime = 2
-        print('adjustedExpTime =', adjustedExpTime)
-        self.cam.SetExposureTime(adjustedExpTime)
-        with self.andor_lock:
-            self.cam.StartAcquisition()
-            self.cam.GetAcquiredData2(self.imageBufferPointer)
-        imageSize = self.cam.GetAcquiredDataDim()
-        # return a copy of the data, since the buffer is reused for next frame
-        im_arr = np.array(self.imageBuffer[0:imageSize], copy=True, dtype = np.uint16)
-        return im_arr
-
+    #def getData2(self):
+    #    print("[Andor] getData2 begin")
+    #    testExpTime = .05
+    #    countsTarget = 15000.
+    #    self.cam.SetExposureTime(testExpTime)
+    #    with self.andor_lock:
+    #        self.cam.StartAcquisition()
+    #        self.cam.GetAcquiredData2(self.imageBufferPointer)
+    #    imageSize = int(self.cam.GetAcquiredDataDim())
+    #    testImage = np.array(self.imageBuffer[0:imageSize], copy=True, dtype = np.uint16)
+    #    maxCounts = np.amax(testImage)
+    #    print('maxCounts =', maxCounts)
+    #    adjustedExpTime = countsTarget*testExpTime/maxCounts
+    #    if adjustedExpTime > 2:
+    #        adjustedExpTime = 2
+    #    print('adjustedExpTime =', adjustedExpTime)
+    #    self.cam.SetExposureTime(adjustedExpTime)
+    #    with self.andor_lock:
+    #        self.cam.StartAcquisition()
+    #        self.cam.GetAcquiredData2(self.imageBufferPointer)
+    #    imageSize = self.cam.GetAcquiredDataDim()
+    #    # return a copy of the data, since the buffer is reused for next frame
+    #    im_arr = np.array(self.imageBuffer[0:imageSize], copy=True, dtype = np.uint16)
+    #    return im_arr
 
     def getAndorSetting(self, functionHandle, attribute):
         result = 0
@@ -193,6 +199,7 @@ class AndorDevice(Devices.BrillouinDevice.Device):
                 reply = self.cam.SetAOILeft(pixel)
             except:
                 print('[AndorDevice] Could not setLeftPx')
+            self.AOILeft = pixel
             print("[AndorDevice] AOILeft set to %d px" % pixel)
         self.unpause()
 
@@ -204,6 +211,7 @@ class AndorDevice(Devices.BrillouinDevice.Device):
                 reply = self.cam.SetAOITop(pixel)
             except:
                 print('[AndorDevice] Could not setTopPx')
+            self.AOITop = pixel
             print("[AndorDevice] AOITop set to %d px" % pixel)
         self.unpause()
 
@@ -214,6 +222,10 @@ class AndorDevice(Devices.BrillouinDevice.Device):
                 reply = self.cam.SetExposureTime(exposureTime)
             except:
                 print('[AndorDevice] Could not setExposure')
+            if self.refState:
+                self.refExp = exposureTime
+            else:
+                self.sampleExp = exposureTime
         #self.changeSetting(self.andor_lock, lambda:self.cam.SetExposureTime(exposureTime))
         #print("[AndorDevice] Exposure set to %f s" % exposureTime)
 
@@ -224,6 +236,10 @@ class AndorDevice(Devices.BrillouinDevice.Device):
             #print('reply =', reply)
         except:
             print('[AndorDevice] Could not forceSetExposure')
+        if self.refState:
+            self.refExp = exposureTime
+        else:
+            self.sampleExp = exposureTime
         #print("[AndorDevice] Exposure set to %f s" % exposureTime)
 
     def getTemperature(self):
@@ -231,9 +247,9 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         #print("[AndorDevice] Temperature = %f" % temp)
         return temp
 
-    def setAutoExp(self, autoExpStatus):
-        self.autoExp = autoExpStatus
-        print('autoExpStatus =', autoExpStatus)
+    #def setAutoExp(self, autoExpStatus):
+    #    self.autoExp = autoExpStatus
+    #    print('autoExpStatus =', autoExpStatus)
 
 # This class does the computation for free running mode, mostly displaying
 # to the GUI

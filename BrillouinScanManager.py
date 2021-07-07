@@ -79,7 +79,7 @@ class ScanManager(QtCore.QThread):
 		# Switch to sample arm
 		self.shutter.setShutterState((1, 0))
 		self.sequentialAcqList[0].forceSetExposure(self.scanSettings['sampleExp'])
-		self.sequentialAcqList[0].pauseBGsubtraction(False)
+		self.sequentialAcqList[0].setRefState(False)
 
 		# Switch to brightfield settings
 		self.motor.moveFilter(1)
@@ -128,7 +128,7 @@ class ScanManager(QtCore.QThread):
 		calFreqRead = np.empty([frames[1]*frames[2], calFreq.shape[0]]) # Keep track of actual microwave freq
 
 		if takeFluorescence:
-			print('[ScanManager] Acquiring fluorescence images...')
+			print('[ScanManager] Acquiring both brightfield + fluorescence images')
 
 		for i in range(frames[2]):
 			print('Frame %d of %d' %(i+1, frames[2]))
@@ -223,7 +223,7 @@ class ScanManager(QtCore.QThread):
 						# take calibration data at end of line
 						self.shutter.setShutterState((0, 1)) # switch to reference arm
 						self.sequentialAcqList[0].forceSetExposure(self.scanSettings['refExp'])
-						self.sequentialAcqList[0].pauseBGsubtraction(True)
+						self.sequentialAcqList[0].setRefState(True)
 						for idx, f in enumerate(calFreq):
 							self.synth.setFreq(f)
 							time.sleep(0.01)
@@ -238,14 +238,16 @@ class ScanManager(QtCore.QThread):
 						# return to start position after end of line
 						#self.motor.moveRelative('x', -2.8125) # reverse backlash correction
 						if step[0] > 0:
-							for m in range(frames[0]-1):
+							for m in range(frames[0]+5): # frames[0]-1 + 6
 								self.motor.moveRelative('x', -step[0])
+							for m in range(6):
+								self.motor.moveRelative('x', step[0])
 						distX = 0.0 # reset relative x-distance tracker to zero
 						#self.motor.moveRelative('x', 2.8125) # forward backlash correction
 						# return to sample arm
 						self.shutter.setShutterState((1, 0))
 						self.sequentialAcqList[0].forceSetExposure(self.scanSettings['sampleExp'])
-						self.sequentialAcqList[0].pauseBGsubtraction(False)
+						self.sequentialAcqList[0].setRefState(False)
 				if j < frames[1]-1:
 					if step[1] > 0:
 						self.motor.moveRelative('y', step[1])
@@ -254,11 +256,13 @@ class ScanManager(QtCore.QThread):
 							distY = 0.0
 						distY += step[1]
 				else:
-					# return to start position after end of line
+					# return to start position after end of frame
 					#self.motor.moveRelative('y', -2.8125) # reverse backlash correction
 					if step[1] > 0:
-						for n in range(frames[1]-1):
+						for n in range(frames[1]+5): # frames[1]-1 + 6
 							self.motor.moveRelative('y', -step[1])
+						for n in range(6):
+							self.motor.moveRelative('y', step[1])
 					distY = 0.0
 					#self.motor.moveRelative('y', 2.8125) # forward backlash correction
 			if i < frames[2]-1:
@@ -321,10 +325,8 @@ class ScanManager(QtCore.QThread):
 		#endTime = timer()
 		#print("[ScanManager] delete unneeded frames processing time = %.3f s" % (endTime - startTime))
 		if takeFluorescence:
-			BrightfieldImage = CMOSImage[::2]
-			FluorescenceImage = CMOSImage[1::2]
-			volumeScan.BrightfieldImage = BrightfieldImage[indices] # Only save one CMOS image every 1/2 imageSize in Y
-			volumeScan.FluorescenceImage = FluorescenceImage[indices] # Only save one CMOS image every 1/2 imageSize in Y
+			volumeScan.BrightfieldImage = CMOSImage[indices] # Only save one CMOS image every 1/2 imageSize in Y
+			volumeScan.FluorescenceImage = CMOSImage[indices+1] # Only save one CMOS image every 1/2 imageSize in Y
 		else:
 			volumeScan.BrightfieldImage = CMOSImage[indices] # Only save one CMOS image every 1/2 imageSize in Y
 			volumeScan.FluorescenceImage = np.zeros(1)

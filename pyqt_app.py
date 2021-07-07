@@ -323,12 +323,16 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         #pItem.child('AutoExposure').sigActivated.connect(self.switchAutoExp)
         pItem.child('Exposure').sigValueChanged.connect(
             lambda data: self.changeHardwareSetting(data, self.AndorDeviceThread.setExposure))
+        pItem.child('Ref. Exposure').sigValueChanged.connect(
+            lambda data: self.changeHardwareSetting(data, self.AndorDeviceThread.setExposure))
         pItem.child('Exposure').setValue(self.AndorDeviceThread.getExposure())
         #pItem.child('Camera Temp.').setValue(self.AndorDeviceThread.getTemperature())
 
         # ========================= Brightfield Camera ==================================
         pItem = self.allParameters.child('Microscope Camera')
         pItem.child('Brightfield Exp.').sigValueChanged.connect(
+            lambda data: self.changeHardwareSetting(data, self.MakoDeviceThread.setExpTime))
+        pItem.child('Fluoresc. Exp.').sigValueChanged.connect(
             lambda data: self.changeHardwareSetting(data, self.MakoDeviceThread.setExpTime))
         pItem.child('ToggleFluorescence').sigActivated.connect(self.toggleFluorescence)
         pItem.child('White Light').sigValueChanged.connect(self.whiteLightPowerChange)
@@ -613,11 +617,14 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.calPoints = 0
         self.heatmapPlot.setXRange(0, self.maxRowPoints)
         self.heatmapPlot.setYRange(0, self.maxColPoints)
-
+        # Make sure switch matches position at end of scan (brightfield)
+        self.allParameters.child('Microscope Camera').child('ToggleFluorescence').setValue(False)
         if (self.allParameters.child('Scan').child('ToggleReference').value() == True):
             self.ShutterDevice.setShutterState(self.ShutterDevice.REFERENCE_STATE)
+            self.AndorDeviceThread.setRefState(True)
         else:
             self.ShutterDevice.setShutterState(self.ShutterDevice.SAMPLE_STATE)
+            self.AndorDeviceThread.setRefState(False)
         if self.BrillouinScan.Cancel_Flag == False:
             currExp = self.session.experimentList[self.BrillouinScan.saveExpIndex]
             currScanIdx = self.session.experimentList[self.BrillouinScan.saveExpIndex].size() - 1
@@ -639,11 +646,11 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         # state == False --> Sample
         if state:
             self.ShutterDevice.setShutterState(self.ShutterDevice.REFERENCE_STATE)
-            self.AndorDeviceThread.pauseBGsubtraction(True)
+            self.AndorDeviceThread.setRefState(True)
             self.AndorDeviceThread.setExposure(self.allParameters.child('Spectrometer Camera').child('Ref. Exposure').value())
         else:
             self.ShutterDevice.setShutterState(self.ShutterDevice.SAMPLE_STATE)
-            self.AndorDeviceThread.pauseBGsubtraction(False)
+            self.AndorDeviceThread.setRefState(False)
             self.AndorDeviceThread.setExposure(self.allParameters.child('Spectrometer Camera').child('Exposure').value())
 
     def toggleFluorescence(self, sliderParam, state):
@@ -839,6 +846,12 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
         #self.hardwareGetTimer.stop()
         self.motorPositionTimer.stop()
+        
+        # Turn all lamps off:
+        self.ZaberDevice.lightSwitch('white', False)
+        self.ZaberDevice.lightSwitch('blue', False)
+        self.ZaberDevice.lightSwitch('red', False)
+        self.ZaberDevice.lightSwitch('trans', False)
 
         self.stop_event.set()
         while self.AndorDeviceThread.isRunning():
