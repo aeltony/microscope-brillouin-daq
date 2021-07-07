@@ -79,7 +79,7 @@ class MakoDevice(Devices.BrillouinDevice.Device):
             self.camera.BeginAcquisition()
             #imgData = np.zeros((self.imageWidth,self.imageHeight), dtype=int)
             try:
-                self.image_result = self.camera.GetNextImage(1000)
+                self.image_result = self.camera.GetNextImage(100000)
             except:
                 print('[MakoDevice] Empty buffer when acquiring image')
                 imgData = np.zeros((self.imageWidth,self.imageHeight), dtype=int)
@@ -107,12 +107,16 @@ class MakoDevice(Devices.BrillouinDevice.Device):
 
     def setExpTime(self, expTime):
         #print('[MakoDevice] setExpTime got called with value=', expTime)
-        self.changeSetting(self.mako_lock, lambda:self.camera.ExposureTime.SetValue(expTime*1000))
+        #self.changeSetting(self.mako_lock, lambda:self.camera.ExposureTime.SetValue(expTime*1000))
+        with self.mako_lock:
+            self.camera.ExposureTime.SetValue(expTime*1000)
         #print("[MakoDevice] Exposure time set to %.3f ms" % expTime)
 
     def setFrameRate(self, frameRate):
         #print('[MakoDevice] setFrameRate got called with value=', frameRate)
-        self.changeSetting(self.mako_lock, lambda:self.camera.AcquisitionFrameRate.SetValue(frameRate))
+        with self.mako_lock:
+            self.camera.AcquisitionFrameRate.SetValue(frameRate)
+        #self.changeSetting(self.mako_lock, lambda:self.camera.AcquisitionFrameRate.SetValue(frameRate))
         #print("[MakoDevice] Frame rate set to %.3f Hz" % frameRate)
 
 # This class does the computation for free running mode, mostly displaying
