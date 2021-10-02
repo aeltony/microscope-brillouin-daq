@@ -151,12 +151,18 @@ class ScanManager(QtCore.QThread):
 					if self.Cancel_Flag == True:
 						print('[ScanManager/run] Cancel_Flag! Terminating scan...')
 						# Return to start location
-						if step[0] > 0:
-							self.motor.moveAbs('x', motorCoords[0,0])
-						if step[1] > 0:
-							self.motor.moveAbs('y', motorCoords[0,1])
-						if step[2] > 0:
-							self.motor.moveAbs('z', motorCoords[0,2])
+						if (step[0] > 0) and (k > 0):
+							for n in range(k):
+								self.motor.moveRelative('x', -step[0])
+							#self.motor.moveAbs('x', motorCoords[0,0])
+						if (step[1] > 0) and (j > 0):
+							for n in range(j):
+								self.motor.moveRelative('y', -step[1])
+							#self.motor.moveAbs('y', motorCoords[0,1])
+						if (step[2] > 0) and (i > 0):
+							for n in range(i):
+								self.motor.moveRelative('z', -step[2])
+							#self.motor.moveAbs('z', motorCoords[0,2])
 						# Stop acquiring data
 						for (dev, devProcessor) in zip(self.sequentialAcqList + self.partialAcqList, self.sequentialProcessingList + self.partialProcessingList):
 							devProcessor.enqueueData = False
@@ -248,14 +254,12 @@ class ScanManager(QtCore.QThread):
 								dev.completeEvent.wait()
 								dev.completeEvent.clear()
 						# return to start position after end of line
-						#self.motor.moveRelative('x', -2.8125) # reverse backlash correction
 						if step[0] > 0:
 							for m in range(frames[0]+5): # frames[0]-1 + 6
 								self.motor.moveRelative('x', -step[0])
 							for m in range(6):
 								self.motor.moveRelative('x', step[0])
 						distX = 0.0 # reset relative x-distance tracker to zero
-						#self.motor.moveRelative('x', 2.8125) # forward backlash correction
 						# return to sample arm
 						self.shutter.setShutterState((1, 0))
 						self.sequentialAcqList[0].forceSetExposure(self.scanSettings['sampleExp'])
@@ -269,14 +273,12 @@ class ScanManager(QtCore.QThread):
 						distY += step[1]
 				else:
 					# return to start position after end of frame
-					#self.motor.moveRelative('y', -2.8125) # reverse backlash correction
 					if step[1] > 0:
 						for n in range(frames[1]+5): # frames[1]-1 + 6
 							self.motor.moveRelative('y', -step[1])
 						for n in range(6):
 							self.motor.moveRelative('y', step[1])
 					distY = 0.0
-					#self.motor.moveRelative('y', 2.8125) # forward backlash correction
 			if i < frames[2]-1:
 				if step[2] > 0:
 					self.motor.moveRelative('z', step[2])
@@ -287,23 +289,6 @@ class ScanManager(QtCore.QThread):
 						self.motor.moveRelative('z', -step[2])
 			motorPos = self.motor.updatePosition()
 			self.motorPosUpdateSig.emit(motorPos)
-
-		# Return to start location
-		#if step[0] > 0:
-		#	for n in range(frames[0]-1):
-		#		self.motor.moveRelative('x', -step[0])
-		#	#self.motor.moveAbs('x', motorCoords[0,0])
-		#if step[1] > 0:
-		#	for n in range(frames[1]-1):
-		#		self.motor.moveRelative('y', -step[1])
-		#	#self.motor.moveAbs('y', motorCoords[0,1])
-		#if step[2] > 0:
-		#	for n in range(frames[2]-1):
-		#		self.motor.moveRelative('z', -step[2])
-		#	#self.motor.moveAbs('z', motorCoords[0,2])
-		## Send motor position signal to update GUI
-		#motorPos = self.motor.updatePosition()
-		#self.motorPosUpdateSig.emit(motorPos)
 
 		# Wait for all processing threads to complete
 		for devProcessor in self.sequentialProcessingList + self.partialProcessingList:
