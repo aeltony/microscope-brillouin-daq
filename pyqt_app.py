@@ -59,6 +59,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.maxRowPoints = 20 # Number of pixels per row in freerunning Brillouin map
         self.maxColPoints = 20 # Number of pixels per column in freerunning Brillouin map
         self.calPoints = 0 # Number of calibration points (used when scanning)
+        self.xy_microstep_size = 0.15625 # Sample stage (Zaber) microstep resolution in um
         laserX = self.configParser.getfloat('More Settings', 'laser_position_x')
         laserY = self.configParser.getfloat('More Settings', 'laser_position_y')
         FSR = self.configParser.getfloat('More Settings', 'FSR')
@@ -76,9 +77,9 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.params = [
             {'name': 'Scan', 'type': 'group', 'children': [
                 {'name': 'Step Size', 'type': 'group', 'children': [
-                    {'name': 'X', 'type': 'float', 'value': 1, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5},
-                    {'name': 'Y', 'type': 'float', 'value': 1, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5},
-                    {'name': 'Z', 'type': 'float', 'value': 0, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5}]},
+                    {'name': 'X', 'type': 'float', 'value': 0.9375, 'suffix':' um', 'step': self.xy_microstep_size, 'limits':(0,1562.5),'decimals':5},
+                    {'name': 'Y', 'type': 'float', 'value': 0.9375, 'suffix':' um', 'step': self.xy_microstep_size, 'limits':(0,1562.5),'decimals':5},
+                    {'name': 'Z', 'type': 'float', 'value': 0, 'suffix':' um', 'step': 0.15, 'limits':(0,1500),'decimals':5}]},
                 {'name': 'Frame Number', 'type': 'group', 'children': [
                     {'name': 'X', 'type': 'int', 'value': frameNumX, 'step': 1, 'limits':(1,2000)},
                     {'name': 'Y', 'type': 'int', 'value': frameNumY, 'step': 1, 'limits':(1,2000)},
@@ -467,20 +468,24 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         return (scanRegX, scanRegY)
 
     def stepSizeValueChangeX(self, param, value):
+        corrStepSizeX = self.xy_microstep_size*int(value/self.xy_microstep_size) # correct for quantization of steps
         laserX = self.allParameters.child('More Settings').child('Laser Focus X').value()
         laserY = self.allParameters.child('More Settings').child('Laser Focus Y').value()
-        lenX = value*(self.allParameters.child('Scan').child('Frame Number').child('X').value()-1)
+        lenX = corrStepSizeX*(self.allParameters.child('Scan').child('Frame Number').child('X').value()-1)
         lenY = self.allParameters.child('Scan').child('Step Size').child('Y').value()*(self.allParameters.child('Scan').child('Frame Number').child('Y').value()-1)
         (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, lenX, lenY)
         self.scanRegion.setData(scanRegX, scanRegY)
+        self.allParameters.child('Scan').child('Step Size').child('X').setValue(corrStepSizeX) # update display to show quantized step
 
     def stepSizeValueChangeY(self, param, value):
+        corrStepSizeY = self.xy_microstep_size*int(value/self.xy_microstep_size) # correct for quantization of steps
         laserX = self.allParameters.child('More Settings').child('Laser Focus X').value()
         laserY = self.allParameters.child('More Settings').child('Laser Focus Y').value()
         lenX = self.allParameters.child('Scan').child('Step Size').child('X').value()*(self.allParameters.child('Scan').child('Frame Number').child('X').value()-1)
-        lenY = value*(self.allParameters.child('Scan').child('Frame Number').child('Y').value()-1)
+        lenY = corrStepSizeY*(self.allParameters.child('Scan').child('Frame Number').child('Y').value()-1)
         (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, lenX, lenY)
         self.scanRegion.setData(scanRegX, scanRegY)
+        self.allParameters.child('Scan').child('Step Size').child('Y').setValue(corrStepSizeY) # update display to show quantized step
 
     def frameNumValueChangeX(self, param, value):
         laserX = self.allParameters.child('More Settings').child('Laser Focus X').value()
