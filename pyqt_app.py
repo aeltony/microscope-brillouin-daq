@@ -59,8 +59,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.maxRowPoints = 20 # Number of pixels per row in freerunning Brillouin map
         self.maxColPoints = 20 # Number of pixels per column in freerunning Brillouin map
         self.calPoints = 0 # Number of calibration points (used when scanning)
-        laserX = self.configParser.getint('More Settings', 'laser_position_x')
-        laserY = self.configParser.getint('More Settings', 'laser_position_y')
+        laserX = self.configParser.getfloat('More Settings', 'laser_position_x')
+        laserY = self.configParser.getfloat('More Settings', 'laser_position_y')
         FSR = self.configParser.getfloat('More Settings', 'FSR')
         SD = self.configParser.getfloat('More Settings', 'SD')
         whitePower = self.configParser.getfloat('Lamps', 'white')
@@ -70,29 +70,31 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         RFpower = self.configParser.getfloat('Synth', 'RF_power')
         spectColumn = self.configParser.getint('Andor', 'spect_column')
         spectRow = self.configParser.getint('Andor', 'spect_row')
+        frameNumX = 20
+        frameNumY = 20
 
         self.params = [
             {'name': 'Scan', 'type': 'group', 'children': [
                 {'name': 'Step Size', 'type': 'group', 'children': [
                     {'name': 'X', 'type': 'float', 'value': 1, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5},
                     {'name': 'Y', 'type': 'float', 'value': 1, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5},
-                    {'name': 'Z', 'type': 'float', 'value': 1, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5}]},
+                    {'name': 'Z', 'type': 'float', 'value': 0, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5}]},
                 {'name': 'Frame Number', 'type': 'group', 'children': [
-                    {'name': 'X', 'type': 'int', 'value': 5, 'step': 1, 'limits':(1,2000)},
-                    {'name': 'Y', 'type': 'int', 'value': 5, 'step': 1, 'limits':(1,2000)},
-                    {'name': 'Z', 'type': 'int', 'value': 5, 'step': 1, 'limits':(1,2000)}]},
+                    {'name': 'X', 'type': 'int', 'value': frameNumX, 'step': 1, 'limits':(1,2000)},
+                    {'name': 'Y', 'type': 'int', 'value': frameNumY, 'step': 1, 'limits':(1,2000)},
+                    {'name': 'Z', 'type': 'int', 'value': 1, 'step': 1, 'limits':(1,2000)}]},
                 {'name': 'ToggleReference', 'type':'toggle', 'ButtonText':('Switch to Reference', 'Switch to Sample')}, #False=Sample="Switch to Ref"
                 {'name': 'Scan/Cancel', 'type': 'action2', 'ButtonText':('Scan', 'Cancel')}
             ]},
             {'name': 'Display', 'type': 'group', 'children': [
-                {'name': 'Colormap (min.)', 'type': 'float', 'value': 5.58, 'suffix':' GHz', 'step': 0.01, 'limits':(0.0, 22.0), 'decimals':3},
-                {'name': 'Colormap (max.)', 'type': 'float', 'value': 5.82, 'suffix':' GHz', 'step': 0.01, 'limits':(0.1, 22.0), 'decimals':3}
+                {'name': 'Colormap (min.)', 'type': 'float', 'value': 4.9, 'suffix':' GHz', 'step': 0.01, 'limits':(0.0, 22.0), 'decimals':3},
+                {'name': 'Colormap (max.)', 'type': 'float', 'value': 5.6, 'suffix':' GHz', 'step': 0.01, 'limits':(0.1, 22.0), 'decimals':3}
             ]},
             {'name': 'Motor', 'type': 'group', 'children': [
                 {'name': 'Curr. X location', 'type': 'float', 'value':0, 'suffix':' um', 'readonly': True, 'decimals':6},
                 {'name': 'Curr. Y location', 'type': 'float', 'value':0, 'suffix':' um', 'readonly': True, 'decimals':6},
                 {'name': 'Curr. Z location', 'type': 'float', 'value':0, 'suffix':' um', 'readonly': True, 'decimals':6},
-                {'name': 'Jog step', 'type': 'float', 'value': 10, 'suffix':' um', 'step': 1, 'limits':(0, 5000)},
+                {'name': 'Jog step', 'type': 'float', 'value': 1, 'suffix':' um', 'step': 1, 'limits':(0, 5000)},
                 {'name': 'Jog X', 'type': 'action3', 'ButtonText':('Jog X +', 'Jog X -', 'Home X')},
                 {'name': 'Jog Y', 'type': 'action3', 'ButtonText':('Jog Y +', 'Jog Y -', 'Home Y')},
                 {'name': 'Jog Z', 'type': 'action3', 'ButtonText':('Jog Z +', 'Jog Z -', 'Home Z')},
@@ -105,7 +107,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
                 {'name': 'Ref. Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.01, 'limits':(0.001, 10)},
                 #{'name': 'AutoExposure', 'type':'toggle', 'ButtonText':('Auto exposure', 'Fixed exposure')}, #False=Fixed exposure
                 #{'name': 'Camera Temp.', 'type': 'float', 'value':0, 'suffix':' C', 'readonly': True}
-            ]},        
+            ]},
             {'name': 'Microscope Camera', 'type': 'group', 'children': [
                 {'name': 'Brightfield Exp.', 'type': 'float', 'value': 20, 'suffix':' ms', 'limits':(0.001, 20000)},
                 {'name': 'Fluoresc. Exp.', 'type': 'float', 'value': 200, 'suffix':' ms', 'limits':(0.001, 20000)},
@@ -118,20 +120,20 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
                 {'name': 'ToggleFluorescence', 'type':'toggle', 'ButtonText':('Switch to Fluorescence', 'Switch to Brightfield')} #False=Brightfield="Switch to Fluorescence"
             ]},
             {'name': 'Microwave Source', 'type': 'group', 'children': [
-                {'name': 'Cal. Freq (min.)', 'type': 'float', 'value': 5.58, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
-                {'name': 'Cal. Freq (max.)', 'type': 'float', 'value': 5.82, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
-                {'name': 'Cal. Freq (step)', 'type': 'float', 'value': 0.08, 'suffix':' GHz', 'step': 0.001, 'limits': (0.001, 13.0), 'decimals':3},
+                {'name': 'Cal. Freq (min.)', 'type': 'float', 'value': 4.9, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
+                {'name': 'Cal. Freq (max.)', 'type': 'float', 'value': 5.9, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
+                {'name': 'Cal. Freq (step)', 'type': 'float', 'value': 0.35, 'suffix':' GHz', 'step': 0.001, 'limits': (0.001, 13.0), 'decimals':3},
                 {'name': 'RF Power', 'type': 'float', 'value': RFpower, 'suffix':' dBm', 'step': 0.1, 'limits': (-20, 10), 'decimals':2},
-                {'name': 'RF Frequency', 'type': 'float', 'value': 5.75, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3}
+                {'name': 'RF Frequency', 'type': 'float', 'value': 5.5, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3}
             ]},
             {'name': 'More Settings', 'type': 'group', 'children': [
                 {'name': 'Ambient Temp.', 'type': 'float', 'value': 0.0, 'suffix':' deg. C', 'readonly':True, 'decimals':4},
                 {'name': 'FSR', 'type': 'float', 'value': FSR, 'suffix':' GHz', 'limits':(5, 100), 'decimals':5},
                 {'name': 'SD', 'type': 'float', 'value': SD, 'suffix':' GHz/px', 'limits':(0, 2), 'decimals':4},
                 {'name': 'Spectrum Col.', 'type':'int', 'value': spectColumn, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
-                {'name': 'Spectrum Row', 'type':'int', 'value': spectRow, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
-                {'name': 'Laser Focus X', 'type': 'int', 'value': laserX, 'suffix':' px', 'limits':(-10000,10000),'decimals':4},
-                {'name': 'Laser Focus Y', 'type': 'int', 'value': laserY, 'suffix':' px', 'limits':(-10000,10000),'decimals':4}
+                {'name': 'Spectrum Row', 'type':'int', 'value': spectRow, 'suffix':' px', 'step': 1, 'limits':(0, 2048)},
+                {'name': 'Laser Focus X', 'type': 'float', 'value': laserX, 'suffix':' um', 'step': 0.1, 'limits':(-5000.0, 5000.0),'decimals':3},
+                {'name': 'Laser Focus Y', 'type': 'float', 'value': laserY, 'suffix':' um', 'step': 0.1, 'limits':(-5000.0, 5000.0),'decimals':3}
             ]}
         ]
         ## Create tree of Parameter objects
@@ -191,13 +193,16 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.CMOSImage.scale(self.scaleFactor, self.scaleFactor)
         self.CMOSview.addItem(self.CMOSImage)
         self.CMOSview.autoRange(padding=0)                      # gets rid of padding
-        self.CMOSvLine = pg.InfiniteLine(angle=90, movable=False)
-        self.CMOShLine = pg.InfiniteLine(angle=0, movable=False)
-        self.CMOSview.addItem(self.CMOSvLine, ignoreBounds=True)
-        self.CMOSview.addItem(self.CMOShLine, ignoreBounds=True)
-        self.CMOSvLine.setPos(laserX)
-        self.CMOShLine.setPos(laserY)
-        self.makoPoints = np.array([])    # To display previous scan points
+        (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, frameNumX-1, frameNumY-1)
+        self.scanRegion = pg.PlotDataItem(scanRegX, scanRegY)
+        self.scanRegion.setPen(width=1, color='r')
+        self.CMOSview.addItem(self.scanRegion)
+        #self.CMOSvLine = pg.InfiniteLine(angle=90, movable=False)
+        #self.CMOShLine = pg.InfiniteLine(angle=0, movable=False)
+        #self.CMOSview.addItem(self.CMOSvLine, ignoreBounds=True)
+        #self.CMOSview.addItem(self.CMOShLine, ignoreBounds=True)
+        #self.CMOSvLine.setPos(laserX)
+        #self.CMOShLine.setPos(laserY)
 
         # Import standard Brillouin colormap data
         arr = []
@@ -397,6 +402,10 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
         # ========================= Scan ===========================================
         pItem = self.allParameters.child('Scan')
+        pItem.child('Step Size').child('X').sigValueChanged.connect(self.stepSizeValueChangeX)
+        pItem.child('Step Size').child('Y').sigValueChanged.connect(self.stepSizeValueChangeY)
+        pItem.child('Frame Number').child('X').sigValueChanged.connect(self.frameNumValueChangeX)
+        pItem.child('Frame Number').child('Y').sigValueChanged.connect(self.frameNumValueChangeY)
         pItem.child('Scan/Cancel').sigActivated.connect(self.startScan)
         pItem.child('Scan/Cancel').sigActivated2.connect(self.cancelScan)
         pItem.child('ToggleReference').sigActivated.connect(self.toggleReference)
@@ -449,17 +458,69 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.allParameters.child('Motor').child('Curr. Y location').setValue(pos[1])
         self.allParameters.child('Motor').child('Curr. Z location').setValue(pos[2])
 
+    def drawSquare(self, laserX, laserY, lenX, lenY):
+        ptsPerSide = 10
+        x = np.linspace(laserX, laserX + lenX, num=ptsPerSide, endpoint=True)
+        y = np.linspace(laserY, laserY - lenY, num=ptsPerSide, endpoint=True)
+        scanRegX = np.concatenate((x, (laserX + lenX)*np.ones(ptsPerSide), np.flip(x), laserX*np.ones(ptsPerSide)))
+        scanRegY = np.concatenate((laserY*np.ones(ptsPerSide), y, (laserY - lenY)*np.ones(ptsPerSide), np.flip(y)))
+        return (scanRegX, scanRegY)
+
+    def stepSizeValueChangeX(self, param, value):
+        laserX = self.allParameters.child('More Settings').child('Laser Focus X').value()
+        laserY = self.allParameters.child('More Settings').child('Laser Focus Y').value()
+        lenX = value*(self.allParameters.child('Scan').child('Frame Number').child('X').value()-1)
+        lenY = self.allParameters.child('Scan').child('Step Size').child('Y').value()*(self.allParameters.child('Scan').child('Frame Number').child('Y').value()-1)
+        (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, lenX, lenY)
+        self.scanRegion.setData(scanRegX, scanRegY)
+
+    def stepSizeValueChangeY(self, param, value):
+        laserX = self.allParameters.child('More Settings').child('Laser Focus X').value()
+        laserY = self.allParameters.child('More Settings').child('Laser Focus Y').value()
+        lenX = self.allParameters.child('Scan').child('Step Size').child('X').value()*(self.allParameters.child('Scan').child('Frame Number').child('X').value()-1)
+        lenY = value*(self.allParameters.child('Scan').child('Frame Number').child('Y').value()-1)
+        (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, lenX, lenY)
+        self.scanRegion.setData(scanRegX, scanRegY)
+
+    def frameNumValueChangeX(self, param, value):
+        laserX = self.allParameters.child('More Settings').child('Laser Focus X').value()
+        laserY = self.allParameters.child('More Settings').child('Laser Focus Y').value()
+        lenX = self.allParameters.child('Scan').child('Step Size').child('X').value()*(value-1)
+        lenY = self.allParameters.child('Scan').child('Step Size').child('Y').value()*(self.allParameters.child('Scan').child('Frame Number').child('Y').value()-1)
+        (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, lenX, lenY)
+        self.scanRegion.setData(scanRegX, scanRegY)
+
+    def frameNumValueChangeY(self, param, value):
+        laserX = self.allParameters.child('More Settings').child('Laser Focus X').value()
+        laserY = self.allParameters.child('More Settings').child('Laser Focus Y').value()
+        lenX = self.allParameters.child('Scan').child('Step Size').child('X').value()*(self.allParameters.child('Scan').child('Frame Number').child('X').value()-1)
+        lenY = self.allParameters.child('Scan').child('Step Size').child('Y').value()*(value-1)
+        (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, lenX, lenY)
+        self.scanRegion.setData(scanRegX, scanRegY)
+
     def CMOShLineValueChange(self, param, value):
         # print("[CMOShLineValueChange]")
-        self.CMOShLine.setPos(value)
-        self.configParser.set('More Settings', 'laser_position_y', str(int(value)))
+        #self.CMOShLine.setPos(value)
+        laserX = self.allParameters.child('More Settings').child('Laser Focus X').value()
+        laserY = value
+        lenX = self.allParameters.child('Scan').child('Step Size').child('X').value()*(self.allParameters.child('Scan').child('Frame Number').child('X').value()-1)
+        lenY = self.allParameters.child('Scan').child('Step Size').child('Y').value()*(self.allParameters.child('Scan').child('Frame Number').child('Y').value()-1)
+        (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, lenX, lenY)
+        self.scanRegion.setData(scanRegX, scanRegY)
+        self.configParser.set('More Settings', 'laser_position_y', str(value))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 
     def CMOSvLineValueChange(self, param, value):
         # print("[CMOSvLineValueChange]")
-        self.CMOSvLine.setPos(value)
-        self.configParser.set('More Settings', 'laser_position_x', str(int(value)))
+        #self.CMOSvLine.setPos(value)
+        laserX = value
+        laserY = self.allParameters.child('More Settings').child('Laser Focus Y').value()
+        lenX = self.allParameters.child('Scan').child('Step Size').child('X').value()*(self.allParameters.child('Scan').child('Frame Number').child('X').value()-1)
+        lenY = self.allParameters.child('Scan').child('Step Size').child('Y').value()*(self.allParameters.child('Scan').child('Frame Number').child('Y').value()-1)
+        (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, lenX, lenY)
+        self.scanRegion.setData(scanRegX, scanRegY)
+        self.configParser.set('More Settings', 'laser_position_x', str(value))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 
