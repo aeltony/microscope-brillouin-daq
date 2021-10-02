@@ -130,6 +130,18 @@ class ScanManager(QtCore.QThread):
 		if takeFluorescence:
 			print('[ScanManager] Acquiring both brightfield + fluorescence images')
 
+		# Backlash correction before scan start:
+		if step[0] > 0:
+			for m in range(6):
+				self.motor.moveRelative('x', -step[0])
+			for m in range(6):
+				self.motor.moveRelative('x', step[0])
+		if step[1] > 0:
+			for m in range(6):
+				self.motor.moveRelative('y', -step[1])
+			for m in range(6):
+				self.motor.moveRelative('y', step[1])
+		# Actual scan start
 		for i in range(frames[2]):
 			print('Frame %d of %d' %(i+1, frames[2]))
 			for j in range(frames[1]):
@@ -268,17 +280,30 @@ class ScanManager(QtCore.QThread):
 			if i < frames[2]-1:
 				if step[2] > 0:
 					self.motor.moveRelative('z', step[2])
+			else:
+				# return to start position after end of frame
+				if step[2] > 0:
+					for n in range(frames[2]-1):
+						self.motor.moveRelative('z', -step[2])
+			motorPos = self.motor.updatePosition()
+			self.motorPosUpdateSig.emit(motorPos)
 
 		# Return to start location
-		if step[0] > 0:
-			self.motor.moveAbs('x', motorCoords[0,0])
-		if step[1] > 0:
-			self.motor.moveAbs('y', motorCoords[0,1])
-		if step[2] > 0:
-			self.motor.moveAbs('z', motorCoords[0,2])
-		# Send motor position signal to update GUI
-		motorPos = self.motor.updatePosition()
-		self.motorPosUpdateSig.emit(motorPos)
+		#if step[0] > 0:
+		#	for n in range(frames[0]-1):
+		#		self.motor.moveRelative('x', -step[0])
+		#	#self.motor.moveAbs('x', motorCoords[0,0])
+		#if step[1] > 0:
+		#	for n in range(frames[1]-1):
+		#		self.motor.moveRelative('y', -step[1])
+		#	#self.motor.moveAbs('y', motorCoords[0,1])
+		#if step[2] > 0:
+		#	for n in range(frames[2]-1):
+		#		self.motor.moveRelative('z', -step[2])
+		#	#self.motor.moveAbs('z', motorCoords[0,2])
+		## Send motor position signal to update GUI
+		#motorPos = self.motor.updatePosition()
+		#self.motorPosUpdateSig.emit(motorPos)
 
 		# Wait for all processing threads to complete
 		for devProcessor in self.sequentialProcessingList + self.partialProcessingList:
