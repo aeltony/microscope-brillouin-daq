@@ -5,6 +5,7 @@ import queue as Queue
 from timeit import default_timer as timer   #debugging
 import time
 import numpy as np
+import os
 from PIL import ImageGrab
 from ExperimentData import *
 import DataFitting
@@ -119,7 +120,6 @@ class ScanManager(QtCore.QThread):
 		step = self.scanSettings['step']
 		calFreq = self.scanSettings['calFreq']
 		imageSize = 9000.0/self.scanSettings['magnification'] # FLIR camera has 4.5 um/px, cropped to 2000 px
-		dataPath = self.scanSettings['dataPath'] # Path for saving screenshot at end of scan
 		screenshots = [] # Empty list for storing screenshots
 		distX = 0.0 # Keep track of relative dist travelled in x-direction w.r.t imageSize to capture full field with FLIR camera
 		distY = 0.0
@@ -361,12 +361,15 @@ class ScanManager(QtCore.QThread):
 		volumeScan.SD = self.SDcal
 		volumeScan.FSR = self.FSRcal
 
+		# Save data to file
 		self.sessionData.experimentList[self.saveExpIndex].addScan(volumeScan)
 		scanIdx = self.sessionData.experimentList[self.saveExpIndex].size() - 1
 		self.sessionData.saveToFile([(self.saveExpIndex,[scanIdx])])
 		# Save screenshots directly as image files
+		path = os.path.dirname(self.sessionData.filename) + '\\Screenshots\\'
+		name = os.path.splitext(self.sessionData.name)[0]
 		for n, s in enumerate(screenshots):
-			s.save(dataPath + 'Screenshot_Exp_%d_Scan_%d_Frame_%d.jpg' %(self.saveExpIndex, scanIdx, n))
+			s.save(path + name + '_Exp_%d_Scan_%d_%d.jpg' %(self.saveExpIndex, scanIdx, n))
 
 		# finally return to free running settings before the scan started
 		for (dev, devProcessor) in zip(self.sequentialAcqList + self.partialAcqList, self.sequentialProcessingList + self.partialProcessingList):

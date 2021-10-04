@@ -2,10 +2,8 @@ import threading
 import datetime
 import numpy as np
 import time
-import math
 import sys
 import os
-import ntpath
 import csv
 from PyQt5 import QtGui, QtCore, QtWidgets
 from PyQt5.QtCore import QTimer
@@ -644,7 +642,6 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             'sampleExp': self.allParameters.child('Spectrometer Camera').child('Exposure').value(),
             'brightExp': self.allParameters.child('Microscope Camera').child('Brightfield Exp.').value(),
             'fluorExp': self.allParameters.child('Microscope Camera').child('Fluoresc. Exp.').value(),
-            'dataPath' : dataPath,
             'takeFluorescence': takeFluorescence,
             'flattenedParamList': flattenedParamList }
         self.BrillouinScan.assignScanSettings(scanSettings)
@@ -889,7 +886,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.sessionName.setText(filename)
 
         #create a single new session
-        self.session = SessionData(ntpath.basename(self.dataFileName), filename=filename)
+        self.session = SessionData(os.path.basename(self.dataFileName), filename=filename)
 
         # create tree model (for display)
         self.model = BrillouinTreeModel()
