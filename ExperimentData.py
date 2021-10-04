@@ -242,7 +242,6 @@ class ScanData:
 				 'FluorescenceImage',
 				 'SpecList',
 				 'MotorCoords',
-				 'Screenshot',
 				 'SD',
 				 'FSR']
 

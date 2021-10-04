@@ -5,6 +5,7 @@ import queue as Queue
 from timeit import default_timer as timer   #debugging
 import time
 import numpy as np
+from PIL import ImageGrab
 from ExperimentData import *
 import DataFitting
 
@@ -24,7 +25,6 @@ class ScanManager(QtCore.QThread):
 
 	def __init__(self, stop_event, motor, shutter, synth):
 		super(ScanManager,self).__init__()
-        # TODO: change to dictionary
 		self.sequentialAcqList = []
 		self.sequentialProcessingList = []
 		self.partialAcqList = []
@@ -42,7 +42,6 @@ class ScanManager(QtCore.QThread):
 		self.SDcal = np.nan
 		self.FSRcal = np.nan
 
-	# TODO: add a lock for accessing these variables
 	def assignScanSettings(self, settings):
 		self.scanSettings = settings
 
@@ -120,6 +119,8 @@ class ScanManager(QtCore.QThread):
 		step = self.scanSettings['step']
 		calFreq = self.scanSettings['calFreq']
 		imageSize = 9000.0/self.scanSettings['magnification'] # FLIR camera has 4.5 um/px, cropped to 2000 px
+		dataPath = self.scanSettings['dataPath'] # Path for saving screenshot at end of scan
+		screenshots = [] # Empty list for storing screenshots
 		distX = 0.0 # Keep track of relative dist travelled in x-direction w.r.t imageSize to capture full field with FLIR camera
 		distY = 0.0
 		indices = np.array([]).astype(int)
@@ -238,6 +239,10 @@ class ScanManager(QtCore.QThread):
 							self.motor.moveRelative('x', step[0])
 							distX += step[0]
 					else:
+						# Check if end of frame, and if so, take a screenshot
+						if j==frames[1]-1 and k==frames[0]-1:
+							screenshot = ImageGrab.grab(bbox=None)
+							screenshots.append(screenshot)
 						# take calibration data at end of line
 						self.shutter.setShutterState((0, 1)) # switch to reference arm
 						self.sequentialAcqList[0].forceSetExposure(self.scanSettings['refExp'])
@@ -341,7 +346,6 @@ class ScanManager(QtCore.QThread):
 			volumeScan.BrightfieldImage = CMOSImage[indices] # Only save one CMOS image every 1/2 imageSize in Y
 			volumeScan.FluorescenceImage = np.zeros(1)
 		volumeScan.MotorCoords = motorCoords
-		volumeScan.Screenshot = self.scanSettings['screenshot']
 		volumeScan.flattenedParamList = self.scanSettings['flattenedParamList']	#save all GUI paramaters
 
 		# Find SD / FSR of final calibration curve
@@ -360,6 +364,9 @@ class ScanManager(QtCore.QThread):
 		self.sessionData.experimentList[self.saveExpIndex].addScan(volumeScan)
 		scanIdx = self.sessionData.experimentList[self.saveExpIndex].size() - 1
 		self.sessionData.saveToFile([(self.saveExpIndex,[scanIdx])])
+		# Save screenshots directly as image files
+		for n, s in enumerate(screenshots):
+			s.save(dataPath + 'Screenshot_Exp_%d_Scan_%d_Frame_%d.jpg' %(self.saveExpIndex, scanIdx, n))
 
 		# finally return to free running settings before the scan started
 		for (dev, devProcessor) in zip(self.sequentialAcqList + self.partialAcqList, self.sequentialProcessingList + self.partialProcessingList):
