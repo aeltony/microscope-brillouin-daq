@@ -603,18 +603,17 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         # First check that a session is running, and that an experiment is selected
         if self.session is None:
             choice = QtGui.QMessageBox.warning(self, 'Starting Scan...',
-                                                "No Session open!",
+                                                'No Session open!',
                                                 QtGui.QMessageBox.Ok)
             return
 
-        print("Starting a scan in Exp_%d: " % self.model.activeExperiment)
+        print('Starting a scan in Exp_%d: ' % self.model.activeExperiment)
 
-        # take screenshot
-        p = QtGui.QScreen.grabWindow(app.primaryScreen(), QtGui.QApplication.desktop().winId())
-        pImage = p.toImage()
-        channels = 4
-        s = pImage.bits().asstring(p.width() * p.height() * channels)
-        screenshotArr = np.frombuffer(s, dtype=np.uint8).reshape((p.height(), p.width(), channels))
+        # Check if 'Screenshots' directory exists, and if not, create one
+        dataPath = os.path.dirname(self.dataFileName) + '\\Screenshots\\'
+        if not os.path.exists(dataPath):
+            os.makedirs(dataPath)
+
         stepSizeArr = np.array([self.allParameters.child('Scan').child('Step Size').child('X').value(), \
             self.allParameters.child('Scan').child('Step Size').child('Y').value(), \
             self.allParameters.child('Scan').child('Step Size').child('Z').value()])
@@ -645,7 +644,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             'sampleExp': self.allParameters.child('Spectrometer Camera').child('Exposure').value(),
             'brightExp': self.allParameters.child('Microscope Camera').child('Brightfield Exp.').value(),
             'fluorExp': self.allParameters.child('Microscope Camera').child('Fluoresc. Exp.').value(),
-            'screenshot': screenshotArr,
+            'dataPath' : dataPath,
             'takeFluorescence': takeFluorescence,
             'flattenedParamList': flattenedParamList }
         self.BrillouinScan.assignScanSettings(scanSettings)
