@@ -119,6 +119,8 @@ class ScanManager(QtCore.QThread):
 		frames = self.scanSettings['frames']
 		step = self.scanSettings['step']
 		calFreq = self.scanSettings['calFreq']
+		refPower = self.scanSettings['refPower']
+		refExp = self.scanSettings['refExp']
 		imageSize = 9000.0/self.scanSettings['magnification'] # FLIR camera has 4.5 um/px, cropped to 2000 px
 		screenshots = [] # Empty list for storing screenshots
 		distX = 0.0 # Keep track of relative dist travelled in x-direction w.r.t imageSize to capture full field with FLIR camera
@@ -131,17 +133,18 @@ class ScanManager(QtCore.QThread):
 		if takeFluorescence:
 			print('[ScanManager] Acquiring both brightfield + fluorescence images')
 
-		# Backlash correction before scan start:
-		if step[0] > 0:
-			for m in range(6):
-				self.motor.moveRelative('x', -step[0])
-			for m in range(6):
-				self.motor.moveRelative('x', step[0])
-		if step[1] > 0:
-			for m in range(6):
-				self.motor.moveRelative('y', -step[1])
-			for m in range(6):
-				self.motor.moveRelative('y', step[1])
+		## Backlash correction before scan start:
+		#if step[0] > 0:
+		#	for m in range(6):
+		#		self.motor.moveRelative('x', -step[0])
+		#	for m in range(6):
+		#		self.motor.moveRelative('x', step[0])
+		#if step[1] > 0:
+		#	for m in range(6):
+		#		self.motor.moveRelative('y', -step[1])
+		#	for m in range(6):
+		#		self.motor.moveRelative('y', step[1])
+
 		# Actual scan start
 		for i in range(frames[2]):
 			print('Frame %d of %d' %(i+1, frames[2]))
@@ -245,11 +248,14 @@ class ScanManager(QtCore.QThread):
 							screenshots.append(screenshot)
 						# take calibration data at end of line
 						self.shutter.setShutterState((0, 1)) # switch to reference arm
-						self.sequentialAcqList[0].forceSetExposure(self.scanSettings['refExp'])
+						self.sequentialAcqList[0].forceSetExposure(0.1) # Default ref. exposure is 0.1 s
 						self.sequentialAcqList[0].setRefState(True)
 						for idx, f in enumerate(calFreq):
+							if refExp[idx] != 0.1:
+								self.sequentialAcqList[0].forceSetExposure(refExp[idx])
 							self.synth.setFreq(f)
-							time.sleep(0.01)
+							self.synth.setPower(refPower[idx])
+							time.sleep(0.16) # Minimum time necessary to set RF power (RF freq only takes 0.01 s)
 							calFreqRead[i*frames[1] + j, idx] = self.synth.getFreq()
 							# Signal all devices to start new acquisition
 							for dev in self.sequentialAcqList:
@@ -369,7 +375,7 @@ class ScanManager(QtCore.QThread):
 		path = os.path.dirname(self.sessionData.filename) + '\\Screenshots\\'
 		name = os.path.splitext(self.sessionData.name)[0]
 		for n, s in enumerate(screenshots):
-			s.save(path + name + '_Exp_%d_Scan_%d_%d.jpg' %(self.saveExpIndex, scanIdx, n))
+			s.save(path + name + '_Exp_%d_Scan_%d_%d.png' %(self.saveExpIndex, scanIdx, n))
 
 		# finally return to free running settings before the scan started
 		for (dev, devProcessor) in zip(self.sequentialAcqList + self.partialAcqList, self.sequentialProcessingList + self.partialProcessingList):

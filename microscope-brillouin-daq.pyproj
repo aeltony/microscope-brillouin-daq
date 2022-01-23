@@ -1370,6 +1370,7 @@
     <Content Include="qt_ui_square.ui" />
     <Content Include="qt_ui_tabbed.ui" />
     <Content Include="Utilities\colormap.txt" />
+    <Content Include="Utilities\freq_vs_counts.txt" />
   </ItemGroup>
   <ItemGroup>
     <InterpreterReference Include="CondaEnv|CondaEnv|dat_acq_py38" />

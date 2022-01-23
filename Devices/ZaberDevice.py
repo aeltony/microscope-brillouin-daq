@@ -17,9 +17,9 @@ class ZaberDevice(Devices.BrillouinDevice.Device):
         self.deviceName = "Zaber"
         self.enqueueData = False
         self.commandQueue = Queue.Queue()
-        self.homeLocX = 0.
-        self.homeLocY = 0.
-        self.homeLocZ = 0.
+        self.homeLocX = 60000.
+        self.homeLocY = 50000.
+        self.homeLocZ = 6990.
 
         self.port = zs.AsciiSerial("COM4", baud=115200, timeout = 20, inter_char_timeout = 0.05)
         self.xy_device = zs.AsciiDevice(self.port, 3) # Sample stage
@@ -34,7 +34,7 @@ class ZaberDevice(Devices.BrillouinDevice.Device):
         self.red_light = zs.AsciiAxis(self.light_device, 3) # Fluorescence light
         self.trans_light = zs.AsciiAxis(self.light_device, 4) # Bright field light
 
-        # Home stages
+        # Zero ('home') stages
         reply = self.z_axis.home()
         if self.checkReply(reply):
             print("[ZaberDevice] Z-axis homed")
@@ -96,6 +96,11 @@ class ZaberDevice(Devices.BrillouinDevice.Device):
         self.updateLock = threading.Lock()
         self._lastPosition = [0, 0, 0]
         self.updatePosition('a')
+
+        # Move stages to center location (scan home)
+        self.moveHome('a')
+        self.updatePosition('a')
+
         # Turn brightfield on, other lamps off:
         self.lightSwitch('white', False)
         self.lightSwitch('blue', False)
