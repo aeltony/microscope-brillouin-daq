@@ -25,7 +25,7 @@ class AndorDevice(Devices.BrillouinDevice.Device):
         self.bgSubtraction = False
         self.refState = False
         self.triggerBG = False
-        self.sampleExp = 0.1
+        self.sampleExp = 0.3
         self.refExp = 0.1
         self.AOITop = 1111
         self.AOILeft = 938
@@ -236,10 +236,6 @@ class AndorDevice(Devices.BrillouinDevice.Device):
             #print('reply =', reply)
         except:
             print('[AndorDevice] Could not forceSetExposure')
-        if self.refState:
-            self.refExp = exposureTime
-        else:
-            self.sampleExp = exposureTime
         #print("[AndorDevice] Exposure set to %f s" % exposureTime)
 
     def getTemperature(self):

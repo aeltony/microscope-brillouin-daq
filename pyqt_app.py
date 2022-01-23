@@ -66,9 +66,11 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         bluePower = self.configParser.getfloat('Lamps', 'blue')
         redPower = self.configParser.getfloat('Lamps', 'red')
         transPower = self.configParser.getfloat('Lamps', 'trans')
-        RFpower = self.configParser.getfloat('Synth', 'RF_power')
         spectColumn = self.configParser.getint('Andor', 'spect_column')
         spectRow = self.configParser.getint('Andor', 'spect_row')
+        RFpower = self.configParser.getfloat('Synth', 'rf_power')
+        countsTarget = self.configParser.getint('Synth', 'counts_target')
+        corrFactor = self.configParser.getfloat('Synth', 'corr_factor')
         frameNumX = 20
         frameNumY = 20
 
@@ -102,7 +104,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
             ]},
             {'name': 'Spectrometer Camera', 'type': 'group', 'children': [
                 {'name': 'Background Subtraction', 'type':'toggle', 'ButtonText':('Turn on background subtraction', 'Turn off background subtraction')},
-                {'name': 'Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.01, 'limits':(0.001, 60)},
+                {'name': 'Exposure', 'type':'float', 'value':0.3, 'suffix':' s', 'step':0.01, 'limits':(0.001, 60)},
                 {'name': 'Ref. Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.01, 'limits':(0.001, 10)},
                 #{'name': 'AutoExposure', 'type':'toggle', 'ButtonText':('Auto exposure', 'Fixed exposure')}, #False=Fixed exposure
                 #{'name': 'Camera Temp.', 'type': 'float', 'value':0, 'suffix':' C', 'readonly': True}
@@ -114,7 +116,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
                 {'name': 'Blue Light', 'type': 'float', 'value': bluePower, 'suffix':' %', 'step': 1, 'limits': (0, 100), 'decimals':3},
                 {'name': 'Red Light', 'type': 'float', 'value': redPower, 'suffix':' %', 'step': 1, 'limits': (0, 100), 'decimals':3},
                 {'name': 'Trans. Light', 'type': 'float', 'value': transPower, 'suffix':' %', 'step': 1, 'limits': (0, 100), 'decimals':3},
-                {'name': 'Magnification', 'type': 'float', 'value': 20, 'suffix':' X', 'limits':(0.01, 200)},
+                {'name': 'Magnification', 'type': 'float', 'value': 55, 'suffix':' X', 'limits':(0.01, 200)},
                 #{'name': 'Frame Rate', 'type': 'int', 'value': 3, 'suffix':' Hz', 'limits':(1, 20)},
                 {'name': 'ToggleFluorescence', 'type':'toggle', 'ButtonText':('Switch to Fluorescence', 'Switch to Brightfield')} #False=Brightfield="Switch to Fluorescence"
             ]},
@@ -122,8 +124,10 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
                 {'name': 'Cal. Freq (min.)', 'type': 'float', 'value': 4.9, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
                 {'name': 'Cal. Freq (max.)', 'type': 'float', 'value': 5.9, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
                 {'name': 'Cal. Freq (step)', 'type': 'float', 'value': 0.35, 'suffix':' GHz', 'step': 0.001, 'limits': (0.001, 13.0), 'decimals':3},
-                {'name': 'RF Power', 'type': 'float', 'value': RFpower, 'suffix':' dBm', 'step': 0.1, 'limits': (-20, 10), 'decimals':2},
-                {'name': 'RF Frequency', 'type': 'float', 'value': 5.5, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3}
+                {'name': 'RF Power', 'type': 'float', 'value': RFpower, 'suffix':' dBm', 'step': 0.1, 'limits': (-50, 10), 'decimals':2},
+                {'name': 'RF Frequency', 'type': 'float', 'value': 5.5, 'suffix':' GHz', 'step': 0.1, 'limits': (0.05, 13.0), 'decimals':3},
+                {'name': 'Counts Target', 'type': 'int', 'value': countsTarget, 'suffix':' counts', 'step':10000, 'limits':(1, 500000)},
+                {'name': 'Corr. Factor', 'type': 'float', 'value': corrFactor, 'step': 0.1, 'limits': (0.0, 1000.0), 'decimals':3}
             ]},
             {'name': 'More Settings', 'type': 'group', 'children': [
                 {'name': 'Ambient Temp.', 'type': 'float', 'value': 0.0, 'suffix':' deg. C', 'readonly':True, 'decimals':4},
@@ -211,6 +215,14 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
                 arr.append([float(x) for x in row] + [1]) # RGBA, 0.0 to 1.0
         self.heatmapColormapArray = np.array(arr)
         self.colormap = pg.ColorMap(np.linspace(0, 1, len(self.heatmapColormapArray)), self.heatmapColormapArray)
+
+        # Import EOM calibration curve
+        arr = []
+        with open('Utilities\\freq_vs_counts.txt', 'r') as f:
+            reader = csv.reader(f, delimiter='\t')
+            for row in reader:
+                arr.append([float(x) for x in row])
+        self.EOMcalCurve = np.array(arr)
 
         # Data acquisition Heatmap
         self.heatmapScanData = np.array([])
@@ -358,6 +370,8 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         pItem.child('RF Frequency').setValue(self.SynthDevice.getFreq())
         pItem.child('RF Power').sigValueChanged.connect(self.synthPowerValueChange)
         pItem.child('RF Power').setValue(self.SynthDevice.getPower())
+        pItem.child('Corr. Factor').sigValueChanged.connect(self.synthCorrFactorValueChange)
+        pItem.child('Counts Target').sigValueChanged.connect(self.synthCountsTargetValueChange)
 
         # ========================= Motor ===========================================
         pItem = self.allParameters.child('Motor')
@@ -539,7 +553,17 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
     def synthPowerValueChange(self, param, value):
         self.SynthDevice.setPower(value)
-        self.configParser.set('Synth', 'RF_power', str(value))
+        self.configParser.set('Synth', 'rf_power', str(value))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
+
+    def synthCountsTargetValueChange(self, param, value):
+        self.configParser.set('Synth', 'counts_target', str(value))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
+
+    def synthCorrFactorValueChange(self, param, value):
+        self.configParser.set('Synth', 'corr_factor', str(value))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 
@@ -618,11 +642,26 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         frameNumArr = np.array([self.allParameters.child('Scan').child('Frame Number').child('X').value(), \
             self.allParameters.child('Scan').child('Frame Number').child('Y').value(), \
             self.allParameters.child('Scan').child('Frame Number').child('Z').value()])
+        magnification = self.allParameters.child('Microscope Camera').child('Magnification').value()
         calFreq = np.arange(self.allParameters.child('Microwave Source').child('Cal. Freq (min.)').value(), \
             self.allParameters.child('Microwave Source').child('Cal. Freq (max.)').value() + \
             self.allParameters.child('Microwave Source').child('Cal. Freq (step)').value(), \
             self.allParameters.child('Microwave Source').child('Cal. Freq (step)').value())
-        magnification = self.allParameters.child('Microscope Camera').child('Magnification').value()
+        # Calculate power/exp. time settings for the calibration frequencies
+        refPower = np.zeros(calFreq.shape) # in dBm
+        refExp = np.zeros(calFreq.shape) # in seconds
+        powerThresh_mW = 1.58 # Above 2 dBm = 1.58 mW higher power drives harmonics
+        for idx, f in enumerate(calFreq):
+            closestIdx = (np.abs(self.EOMcalCurve[:,0] - calFreq[idx])).argmin()
+            power_mW = self.allParameters.child('Microwave Source').child('Counts Target').value()*self.allParameters.child('Microwave Source').child('Corr. Factor').value()/0.1/self.EOMcalCurve[closestIdx,1]
+            if power_mW < powerThresh_mW:
+                refPower[idx] = np.round(10*np.log10(power_mW), 1) # in dBm
+                refExp[idx] = 0.1 # Default ref. exposure is 0.1 s
+            else:
+                refPower[idx] = 2.0 # Above 2 dBm = 1.58 mW higher power drives harmonics
+                refExp[idx] = np.round(self.allParameters.child('Microwave Source').child('Counts Target').value()*self.allParameters.child('Microwave Source').child('Corr. Factor').value()/self.EOMcalCurve[closestIdx,1]/powerThresh_mW, 2)
+                if refExp[idx]>10:
+                    refExp[idx] = 10 # Limit ref. exposure time to 10 s maximum
 
         flattenedParamList = generateParameterList(self.params, self.allParameters)
 
@@ -635,10 +674,11 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         scanSettings = {'step': stepSizeArr,
             'frames': frameNumArr,
             'calFreq': calFreq,
+            'refPower': refPower,
+            'refExp': refExp,
             'magnification': magnification,
             'laserX': self.allParameters.child('More Settings').child('Laser Focus X').value(),
             'laserY': self.allParameters.child('More Settings').child('Laser Focus Y').value(),
-            'refExp': self.allParameters.child('Spectrometer Camera').child('Ref. Exposure').value(),
             'sampleExp': self.allParameters.child('Spectrometer Camera').child('Exposure').value(),
             'brightExp': self.allParameters.child('Microscope Camera').child('Brightfield Exp.').value(),
             'fluorExp': self.allParameters.child('Microscope Camera').child('Fluoresc. Exp.').value(),
@@ -682,6 +722,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         # Return microwave source to previous (non-calibration) set point
         self.SynthDevice.setFreq(self.allParameters.child('Microwave Source').child('RF Frequency').value())
         self.SynthDevice.setPower(self.allParameters.child('Microwave Source').child('RF Power').value())
+        time.sleep(0.16)
         # Make sure switch matches position at end of scan (brightfield)
         self.allParameters.child('Microscope Camera').child('ToggleFluorescence').setValue(False)
         if (self.allParameters.child('Scan').child('ToggleReference').value() == True):
