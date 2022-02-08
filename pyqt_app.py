@@ -721,6 +721,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.heatmapPlot.setYRange(0, self.maxColPoints)
         # Return microwave source to previous (non-calibration) set point
         self.SynthDevice.setFreq(self.allParameters.child('Microwave Source').child('RF Frequency').value())
+        time.sleep(0.02)
         self.SynthDevice.setPower(self.allParameters.child('Microwave Source').child('RF Power').value())
         time.sleep(0.16)
         # Make sure switch matches position at end of scan (brightfield)

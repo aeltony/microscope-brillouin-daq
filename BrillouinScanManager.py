@@ -254,8 +254,9 @@ class ScanManager(QtCore.QThread):
 							if refExp[idx] != 0.1:
 								self.sequentialAcqList[0].forceSetExposure(refExp[idx])
 							self.synth.setFreq(f)
+							time.sleep(0.02)
 							self.synth.setPower(refPower[idx])
-							time.sleep(0.16) # Minimum time necessary to set RF power (RF freq only takes 0.01 s)
+							time.sleep(0.16) # Minimum time necessary to set RF power
 							calFreqRead[i*frames[1] + j, idx] = self.synth.getFreq()
 							# Signal all devices to start new acquisition
 							for dev in self.sequentialAcqList:
