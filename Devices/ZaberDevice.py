@@ -17,16 +17,24 @@ class ZaberDevice(Devices.BrillouinDevice.Device):
         self.deviceName = "Zaber"
         self.enqueueData = False
         self.commandQueue = Queue.Queue()
-        self.homeLocX = 0.
-        self.homeLocY = 0.
-        self.homeLocZ = 0.
+        self.homeLocX = 60000.
+        self.homeLocY = 50000.
+        self.homeLocZ = 6990.
 
         self.port = zs.AsciiSerial("COM4", baud=115200, timeout = 20, inter_char_timeout = 0.05)
-        self.xy_device = zs.AsciiDevice(self.port, 3)
-        self.z_device = zs.AsciiDevice(self.port, 4)
+        self.xy_device = zs.AsciiDevice(self.port, 3) # Sample stage
+        self.z_device = zs.AsciiDevice(self.port, 4) # Objective stage
         self.y_axis = zs.AsciiAxis(self.xy_device, 1)
         self.x_axis = zs.AsciiAxis(self.xy_device, 2)
         self.z_axis = zs.AsciiAxis(self.z_device, 1)
+        self.filter_device = zs.AsciiDevice(self.port, 5) # Filter wheel
+        self.light_device = zs.AsciiDevice(self.port, 2)
+        self.white_light = zs.AsciiAxis(self.light_device, 1) # Fluorescence light
+        self.blue_light = zs.AsciiAxis(self.light_device, 2) # Fluorescence light
+        self.red_light = zs.AsciiAxis(self.light_device, 3) # Fluorescence light
+        self.trans_light = zs.AsciiAxis(self.light_device, 4) # Bright field light
+
+        # Zero ('home') stages
         reply = self.z_axis.home()
         if self.checkReply(reply):
             print("[ZaberDevice] Z-axis homed")
@@ -43,10 +51,34 @@ class ZaberDevice(Devices.BrillouinDevice.Device):
         else:
             print("[ZaberDevice] Y-axis home failed")
 
+        # Set filter wheel to brightfield setting (home, i.e. index 1)
+        reply = self.filter_device.home()
+        if self.checkReply(reply):
+            print("[ZaberDevice] Filter wheel homed")
+        else:
+            print("[ZaberDevice] Filter wheel home failed")
+
         #print('xy status =', self.xy_device.get_status())
         #print('z status =', self.z_device.get_status())
         self.xy_microstep_size = 0.15625 #Microstep resolution in um
         self.z_microstep_size = 0.001 #Encoder count size in um
+
+        # Get maximum current for all lamps
+        reply = self.white_light.send("get lamp.current.max") # Max. current for white light
+        self.whiteMaxCurrent = float(reply.data)
+        print("[ZaberDevice] White light max. current = %.1f A" %self.whiteMaxCurrent)
+
+        reply = self.blue_light.send("get lamp.current.max") # Max. current for blue light
+        self.blueMaxCurrent = float(reply.data)
+        print("[ZaberDevice] Blue light max. current = %.1f A" %self.blueMaxCurrent)
+
+        reply = self.red_light.send("get lamp.current.max") # Max. current for red light
+        self.redMaxCurrent = float(reply.data)
+        print("[ZaberDevice] Red light max. current = %.1f A" %self.redMaxCurrent)
+
+        reply = self.trans_light.send("get lamp.current.max") # Max. current for transmitted light
+        self.transMaxCurrent = float(reply.data)
+        print("[ZaberDevice] Transmitted light max. current = %.1f A" %self.transMaxCurrent)
 
         #speed = 26
         #speed_cmd = zs.AsciiCommand("set speed", int(speed/26*894455))  # 894455 = 26mm/s
@@ -61,10 +93,19 @@ class ZaberDevice(Devices.BrillouinDevice.Device):
         #self.z_axis.send(acceleration_cmd)
 
         self.ZaberLock = app.ZaberLock
-
         self.updateLock = threading.Lock()
         self._lastPosition = [0, 0, 0]
         self.updatePosition('a')
+
+        # Move stages to center location (scan home)
+        self.moveHome('a')
+        self.updatePosition('a')
+
+        # Turn brightfield on, other lamps off:
+        self.lightSwitch('white', False)
+        self.lightSwitch('blue', False)
+        self.lightSwitch('red', False)
+        self.lightSwitch('trans', True)
 
     def shutdown(self):
         with self.ZaberLock:
@@ -213,3 +254,90 @@ class ZaberDevice(Devices.BrillouinDevice.Device):
                 if self.checkReply(reply)==False:
                     print("[ZaberDevice] Z-axis moveAbs failed")
         self.updatePosition(whichAxis)
+
+    def moveFilter(self, index=1):
+        # Index 1 = brightfield (BS)
+        # Index 2 = fluorescence (dichroic)
+        with self.ZaberLock:
+            reply = self.filter_device.send("move index %d" %index)
+            if self.checkReply(reply)==False:
+                print("[ZaberDevice] Filter wheel move to index %d failed" %index)
+
+    def lightSwitch(self, light='trans', value=True):
+        # True = light ON, False = light OFF
+        with self.ZaberLock:
+            if light=='white':
+                if value:
+                    reply = self.white_light.send("lamp on")
+                    if self.checkReply(reply)==False:
+                        print("[ZaberDevice] White light ON failed")
+                else:
+                    reply = self.white_light.send("lamp off")
+                    if self.checkReply(reply)==False:
+                        print("[ZaberDevice] White light OFF failed")
+            if light=='blue':
+                if value:
+                    reply = self.blue_light.send("lamp on")
+                    if self.checkReply(reply)==False:
+                        print("[ZaberDevice] Blue light ON failed")
+                else:
+                    reply = self.blue_light.send("lamp off")
+                    if self.checkReply(reply)==False:
+                        print("[ZaberDevice] Blue light OFF failed")
+            if light=='red':
+                if value:
+                    reply = self.red_light.send("lamp on")
+                    if self.checkReply(reply)==False:
+                        print("[ZaberDevice] Red light ON failed")
+                else:
+                    reply = self.red_light.send("lamp off")
+                    if self.checkReply(reply)==False:
+                        print("[ZaberDevice] Red light OFF failed")
+            if light=='trans':
+                if value:
+                    reply = self.trans_light.send("lamp on")
+                    if self.checkReply(reply)==False:
+                        print("[ZaberDevice] Transmitted light ON failed")
+                else:
+                    reply = self.trans_light.send("lamp off")
+                    if self.checkReply(reply)==False:
+                        print("[ZaberDevice] Transmitted light OFF failed")
+                    
+    def setPower(self, light='trans', percent=0):
+        with self.ZaberLock:
+            if light=='white':
+                current = percent*self.whiteMaxCurrent/100
+                reply = self.white_light.send("set lamp.current %f" %current)
+                if self.checkReply(reply)==False:
+                    print("[ZaberDevice] White light set power failed")
+            if light=='blue':
+                current = percent*self.blueMaxCurrent/100
+                reply = self.blue_light.send("set lamp.current %f" %current)
+                if self.checkReply(reply)==False:
+                    print("[ZaberDevice] Blue light set power failed")
+            if light=='red':
+                current = percent*self.redMaxCurrent/100
+                reply = self.red_light.send("set lamp.current %f" %current)
+                if self.checkReply(reply)==False:
+                    print("[ZaberDevice] Red light set power failed")
+            if light=='trans':
+                current = percent*self.transMaxCurrent/100
+                reply = self.trans_light.send("set lamp.current %f" %current)
+                if self.checkReply(reply)==False:
+                    print("[ZaberDevice] Transmitted light set power failed")
+
+    def getPower(self, light='trans'):
+        with self.ZaberLock:
+            if light=='white':
+                reply = self.white_light.send("get lamp.current")
+                power = 100*float(reply.data)/self.whiteMaxCurrent # Percentage
+            if light=='blue':
+                reply = self.blue_light.send("get lamp.current")
+                power = 100*float(reply.data)/self.blueMaxCurrent # Percentage
+            if light=='red':
+                reply = self.red_light.send("get lamp.current")
+                power = 100*float(reply.data)/self.redMaxCurrent # Percentage
+            if light=='trans':
+                reply = self.trans_light.send("get lamp.current")
+                power = 100*float(reply.data)/self.transMaxCurrent # Percentage
+        return power

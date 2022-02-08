@@ -60,6 +60,50 @@ class Andor:
     def SetVerbose(self, state=True):
         self.verbosity = state
 
+    def Restart(self):
+        # Stop acquisition
+        print('[AndorDevice/Restart] Stopping acquisition...')
+        try:
+            error = self.dll.AT_Command(self.handle, 'AcquisitionStop')
+            self.verbose(ERROR_CODE[error], sys._getframe().f_code.co_name)
+            if error != 0:
+                print('[AndorDevice/Restart] Stop acq error: ' + ERROR_CODE[error])
+                return error
+        except:
+            print('[AndorDevice/Restart] Failed to send AcquisitionStop')
+        # Flush buffer
+        print('[AndorDevice/Restart] Flushing buffer...')
+        try:
+            error = self.dll.AT_Flush(self.handle)
+            self.verbose(ERROR_CODE[error], sys._getframe().f_code.co_name)
+            if error != 0:
+                print('[AndorDevice/Restart] AT_Flush error:' + ERROR_CODE[error])
+                return error
+        except:
+            print('[AndorDevice/Restart] Failed to send AT_Flush')
+        # Close camera
+        print('[AndorDevice/Restart] Closing...')
+        try:
+            error = self.dll.AT_Close(self.handle)
+            self.verbose(ERROR_CODE[error], sys._getframe().f_code.co_name)
+            if error != 0:
+                print('[AndorDevice/Restart] AT_Close error:' + ERROR_CODE[error])
+                return error
+        except:
+            print('[AndorDevice/Restart] Failed to send AT_Close')
+        # Re-open camera
+        print('[AndorDevice/Restart] Re-opening...')
+        try:
+            error = self.dll.AT_Open(0, byref(self.handle))
+            self.verbose(ERROR_CODE[error], sys._getframe().f_code.co_name)
+            if error != 0:
+                print('[AndorDevice/Restart] AT_Open error:' + ERROR_CODE[error])
+                return error
+        except:
+            print('[AndorDevice/Restart] Failed to send AT_Open')
+        self.CreateBuffer()
+        return error
+
     def AbortAcquisition(self):
         error = self.dll.AT_Command(self.handle, 'AcquisitionStop')
         self.verbose(ERROR_CODE[error], sys._getframe().f_code.co_name)
@@ -86,16 +130,16 @@ class Andor:
     def ShutDown(self):
         error1 = self.dll.AT_Flush(self.handle)
         if error1 != 0:
-            print('AT_Flush error:', ERROR_CODE[error1])
+            print('[AndorDevice] AT_Flush error: ' + ERROR_CODE[error1])
         error2 = self.dll.AT_Close(self.handle)
         if error2 != 0:
-            print('AT_Close error:', ERROR_CODE[error2])
+            print('[AndorDevice] AT_Close error: ' + ERROR_CODE[error2])
         error3 = self.dll.AT_FinaliseLibrary('')
         if error3 != 0:
-            print('AT_FinaliseLibrary error:', ERROR_CODE[error3])
+            print('[AndorDevice] AT_FinaliseLibrary error: ' + ERROR_CODE[error3])
         error4 = self.utildll.AT_FinaliseUtilityLibrary('')
         if error4 != 0:
-            print('AT_FinaliseUtilityLibrary error:', ERROR_CODE[error4])
+            print('[AndorDevice] AT_FinaliseUtilityLibrary error: ' + ERROR_CODE[error4])
         if error1 + error2 + error3 + error4 > 0:
             error = -1
         else:
@@ -107,7 +151,7 @@ class Andor:
         max_lng = c_int()
         error = self.dll.AT_GetStringMaxLength(self.handle,'SerialNumber', byref(max_lng))
         if error != 0:
-            print('AT_GetStringMaxLength error:', ERROR_CODE[error])
+            print('[AndorDevice] AT_GetStringMaxLength error: ' + ERROR_CODE[error])
             max_lng = c_int(17)
         ser_num = create_string_buffer(max_lng.value)
         error = self.dll.AT_GetString(self.handle, 'SerialNumber', byref(ser_num))
@@ -181,24 +225,32 @@ class Andor:
 
     def StartAcquisition(self):
         error = self.dll.AT_QueueBuffer(self.handle, self.imageBufferPointer, self.buffer_size)
-        if error != 0:
-            print('Queue buffer error =', error)
         self.verbose(ERROR_CODE[error], sys._getframe().f_code.co_name)
+        if error != 0:
+            print('[AndorDevice] Queue buffer error: ' + ERROR_CODE[error])
         # Start acquisition
         error = self.dll.AT_Command(self.handle, 'AcquisitionStart')
-        if error != 0:
-            print('Start acq error =', error)
         self.verbose(ERROR_CODE[error], sys._getframe().f_code.co_name)
+        if error != 0:
+            print('[AndorDevice] Start acq error: ' + ERROR_CODE[error])
         # Wait for frame to be available
         error = self.dll.AT_WaitBuffer(self.handle, byref(self.imageBufferPointer), byref(self.im_size), 100000)
-        if error != 0:
-            print('Wait buffer error =', error)
         self.verbose(ERROR_CODE[error], sys._getframe().f_code.co_name)
+        if error != 0:
+            print('[AndorDevice] Wait buffer error: ' + ERROR_CODE[error])
+            # Try restarting camera
+            print('[AndorDevice] Restarting...')
+            error = self.Restart()
+            if error != 0:
+                return ERROR_CODE[error]
+            else:
+                error = -2
+                return ERROR_CODE[error]
         # Stop acquisition
         error = self.dll.AT_Command(self.handle, 'AcquisitionStop')
-        if error != 0:
-            print('Stop acq error =', error)
         self.verbose(ERROR_CODE[error], sys._getframe().f_code.co_name)
+        if error != 0:
+            print('[AndorDevice] Stop acq error: ' + ERROR_CODE[error])
         return ERROR_CODE[error]
 
     def GetImageSize(self):
@@ -314,6 +366,8 @@ class Andor:
         return ERROR_CODE[error]
 
 ERROR_CODE = {
+    -2: 'Restarted camera',
+    -1: 'Failed to ShutDown',
     0: 'AT_SUCCESS',
     1: 'AT_ERR_NOTINITIALISED',
     2: 'AT_ERR_NOTIMPLEMENTED',
@@ -353,4 +407,4 @@ ERROR_CODE = {
     36: 'AT_ERR_NULL_PTRSIZE',
     37: 'AT_ERR_NOMEMORY',
     100: 'AT_ERR_HARDWARE_OVERFLOW'
-}
+    }

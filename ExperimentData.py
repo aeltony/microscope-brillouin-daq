@@ -238,10 +238,10 @@ class ScanData:
 				 'CalFreq',
 				 'TempList',
 				 'AndorImage',
-				 'CMOSImage',
+				 'BrightfieldImage',
+				 'FluorescenceImage',
 				 'SpecList',
 				 'MotorCoords',
-				 'Screenshot',
 				 'SD',
 				 'FSR']
 

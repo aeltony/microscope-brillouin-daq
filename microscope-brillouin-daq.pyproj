@@ -1365,9 +1365,12 @@
     <Content Include="qt_ui_dual_spectrum.ui" />
     <Content Include="qt_ui_giant_spectrum.ui" />
     <Content Include="qt_ui_no_data_viewer.ui" />
+    <Content Include="qt_ui_simplified.ui" />
     <Content Include="qt_ui_single_spectrum.ui" />
+    <Content Include="qt_ui_square.ui" />
     <Content Include="qt_ui_tabbed.ui" />
     <Content Include="Utilities\colormap.txt" />
+    <Content Include="Utilities\freq_vs_counts.txt" />
   </ItemGroup>
   <ItemGroup>
     <InterpreterReference Include="CondaEnv|CondaEnv|dat_acq_py38" />

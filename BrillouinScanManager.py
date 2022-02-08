@@ -5,6 +5,8 @@ import queue as Queue
 from timeit import default_timer as timer   #debugging
 import time
 import numpy as np
+import os
+from PIL import ImageGrab
 from ExperimentData import *
 import DataFitting
 
@@ -24,7 +26,6 @@ class ScanManager(QtCore.QThread):
 
 	def __init__(self, stop_event, motor, shutter, synth):
 		super(ScanManager,self).__init__()
-        # TODO: change to dictionary
 		self.sequentialAcqList = []
 		self.sequentialProcessingList = []
 		self.partialAcqList = []
@@ -42,7 +43,6 @@ class ScanManager(QtCore.QThread):
 		self.SDcal = np.nan
 		self.FSRcal = np.nan
 
-	# TODO: add a lock for accessing these variables
 	def assignScanSettings(self, settings):
 		self.scanSettings = settings
 
@@ -79,9 +79,17 @@ class ScanManager(QtCore.QThread):
 		# Switch to sample arm
 		self.shutter.setShutterState((1, 0))
 		self.sequentialAcqList[0].forceSetExposure(self.scanSettings['sampleExp'])
-		self.sequentialAcqList[0].pauseBGsubtraction(False)
+		self.sequentialAcqList[0].setRefState(False)
 
-		print("[ScanManager/run] Start")
+		# Switch to brightfield settings
+		self.motor.moveFilter(1)
+		self.motor.lightSwitch('white', False)
+		self.motor.lightSwitch('blue', False)
+		self.motor.lightSwitch('red', False)
+		self.motor.lightSwitch('trans', True)
+		self.partialAcqList[0].setExpTime(self.scanSettings['brightExp'])
+
+		#print("[ScanManager/run] Start")
 
 		# first turn off free running mode
 		for dev in self.sequentialAcqList + self.partialAcqList:
@@ -100,20 +108,46 @@ class ScanManager(QtCore.QThread):
 			devProcessor.enqueueData = True
 			while not devProcessor.processedData.empty():
 				devProcessor.processedData.get()
-			
+
 		# Send signal to clear GUI plots
 		self.clearGUISig.emit()
 
 		for dev in self.sequentialAcqList + self.partialAcqList:
 			dev.unpause()
 
+		takeFluorescence = self.scanSettings['takeFluorescence']
 		frames = self.scanSettings['frames']
 		step = self.scanSettings['step']
 		calFreq = self.scanSettings['calFreq']
+		refPower = self.scanSettings['refPower']
+		refExp = self.scanSettings['refExp']
+		imageSize = 9000.0/self.scanSettings['magnification'] # FLIR camera has 4.5 um/px, cropped to 2000 px
+		screenshots = [] # Empty list for storing screenshots
+		distX = 0.0 # Keep track of relative dist travelled in x-direction w.r.t imageSize to capture full field with FLIR camera
+		distY = 0.0
+		indices = np.array([]).astype(int)
+		partialAcqNum = 0 # Keep track of number of FLIR camera images acquired
 		motorCoords = np.empty([frames[0]*frames[1]*frames[2],3]) # Keep track of coordinates
 		calFreqRead = np.empty([frames[1]*frames[2], calFreq.shape[0]]) # Keep track of actual microwave freq
 
+		if takeFluorescence:
+			print('[ScanManager] Acquiring both brightfield + fluorescence images')
+
+		## Backlash correction before scan start:
+		#if step[0] > 0:
+		#	for m in range(6):
+		#		self.motor.moveRelative('x', -step[0])
+		#	for m in range(6):
+		#		self.motor.moveRelative('x', step[0])
+		#if step[1] > 0:
+		#	for m in range(6):
+		#		self.motor.moveRelative('y', -step[1])
+		#	for m in range(6):
+		#		self.motor.moveRelative('y', step[1])
+
+		# Actual scan start
 		for i in range(frames[2]):
+			print('Frame %d of %d' %(i+1, frames[2]))
 			for j in range(frames[1]):
 				for k in range(frames[0]):
 					#print('i,j,k = %d %d %d' % (i,j,k))
@@ -121,9 +155,18 @@ class ScanManager(QtCore.QThread):
 					if self.Cancel_Flag == True:
 						print('[ScanManager/run] Cancel_Flag! Terminating scan...')
 						# Return to start location
-						self.motor.moveAbs('x', motorCoords[0,0])
-						self.motor.moveAbs('y', motorCoords[0,1])
-						self.motor.moveAbs('z', motorCoords[0,2])
+						if (step[0] > 0) and (k > 0):
+							for n in range(k):
+								self.motor.moveRelative('x', -step[0])
+							#self.motor.moveAbs('x', motorCoords[0,0])
+						if (step[1] > 0) and (j > 0):
+							for n in range(j):
+								self.motor.moveRelative('y', -step[1])
+							#self.motor.moveAbs('y', motorCoords[0,1])
+						if (step[2] > 0) and (i > 0):
+							for n in range(i):
+								self.motor.moveRelative('z', -step[2])
+							#self.motor.moveAbs('z', motorCoords[0,2])
 						# Stop acquiring data
 						for (dev, devProcessor) in zip(self.sequentialAcqList + self.partialAcqList, self.sequentialProcessingList + self.partialProcessingList):
 							devProcessor.enqueueData = False
@@ -141,70 +184,123 @@ class ScanManager(QtCore.QThread):
 						motorPos = self.motor.updatePosition()
 						self.motorPosUpdateSig.emit(motorPos)
 						return
-					# Signal all devices to start new acquisition
-					for dev in self.sequentialAcqList:
-						dev.continueEvent.set()
-					# Synchronization... wait for all the device threads to complete
-					for dev in self.sequentialAcqList:
-						dev.completeEvent.wait()
-						dev.completeEvent.clear()
+					# Check if 1st X step or distX > half image size (FLIR camera), if so, take new widefield image
+					if np.abs(distX) >= 0.5*imageSize or k == 0:
+						# Signal all devices to start new acquisition
+						for dev in self.sequentialAcqList + self.partialAcqList:
+							dev.continueEvent.set()
+						# synchronization... wait for all the device threads to complete
+						for dev in self.sequentialAcqList + self.partialAcqList:
+							dev.completeEvent.wait()
+							dev.completeEvent.clear()
+						# Reset distX to 0 (relative) distance
+						distX = 0.0
+						# Check if 1st Y step or distY > half image size (FLIR camera), if so save index
+						if np.abs(distY) >= 0.5*imageSize or j == 0:
+							indices = np.append(indices, partialAcqNum)
+						# Increment count of FLIR images acquired
+						partialAcqNum += 1
+						# Check if fluorescence active, if so, take (only) fluorescence image
+						if takeFluorescence:
+							# Switch to fluorescence settings
+							self.motor.moveFilter(2)
+							self.motor.lightSwitch('white', True)
+							self.motor.lightSwitch('blue', True)
+							self.motor.lightSwitch('red', True)
+							self.motor.lightSwitch('trans', False)
+							self.partialAcqList[0].setExpTime(self.scanSettings['fluorExp'])
+							# Signal all devices to start new acquisition
+							for dev in self.partialAcqList:
+								dev.continueEvent.set()
+							# synchronization... wait for all the device threads to complete
+							for dev in self.partialAcqList:
+								dev.completeEvent.wait()
+								dev.completeEvent.clear()
+							# Switch back to brightfield settings
+							self.motor.moveFilter(1)
+							self.motor.lightSwitch('white', False)
+							self.motor.lightSwitch('blue', False)
+							self.motor.lightSwitch('red', False)
+							self.motor.lightSwitch('trans', True)
+							self.partialAcqList[0].setExpTime(self.scanSettings['brightExp'])
+					else:
+						# Signal all devices to start new acquisition
+						for dev in self.sequentialAcqList:
+							dev.continueEvent.set()
+						# Synchronization... wait for all the device threads to complete
+						for dev in self.sequentialAcqList:
+							dev.completeEvent.wait()
+							dev.completeEvent.clear()
 					# Send motor position signal to update GUI
 					motorPos = self.motor.updatePosition()
 					#print('motorPos =', motorPos)
 					motorCoords[i*frames[1]*frames[0] + j*frames[0] + k] = np.array(motorPos)
-					#motorCoords = np.vstack((motorCoords, np.array(motorPos)))
 					self.motorPosUpdateSig.emit(motorPos)
-					# Move one X step forward/backward if not end of line
+					# Move one X step forward if not end of line
 					if k < frames[0]-1:
-						if (i+j)%2 == 0:
-							if k == 0 and j > 0:
-								self.motor.moveRelative('x', 2.8125) #2.8125
+						if step[0] > 0:
 							self.motor.moveRelative('x', step[0])
-							#self.motor.setMotorAsync('moveRelative', 'x', [step[0]])
-						else:
-							# Backlash compensation
-							if k == 0 and j > 0:
-								self.motor.moveRelative('x', -2.8125) #-2.96875
-							self.motor.moveRelative('x', -step[0])
-							#self.motor.setMotorAsync('moveRelative', 'x', [-step[0]])
+							distX += step[0]
 					else:
+						# Check if end of frame, and if so, take a screenshot
+						if j==frames[1]-1 and k==frames[0]-1:
+							screenshot = ImageGrab.grab(bbox=None)
+							screenshots.append(screenshot)
 						# take calibration data at end of line
 						self.shutter.setShutterState((0, 1)) # switch to reference arm
-						self.sequentialAcqList[0].forceSetExposure(self.scanSettings['refExp'])
-						self.sequentialAcqList[0].pauseBGsubtraction(True)
+						self.sequentialAcqList[0].forceSetExposure(0.1) # Default ref. exposure is 0.1 s
+						self.sequentialAcqList[0].setRefState(True)
 						for idx, f in enumerate(calFreq):
+							if refExp[idx] != 0.1:
+								self.sequentialAcqList[0].forceSetExposure(refExp[idx])
 							self.synth.setFreq(f)
-							time.sleep(0.01)
+							time.sleep(0.02)
+							self.synth.setPower(refPower[idx])
+							time.sleep(0.16) # Minimum time necessary to set RF power
 							calFreqRead[i*frames[1] + j, idx] = self.synth.getFreq()
 							# Signal all devices to start new acquisition
-							for dev in self.sequentialAcqList + self.partialAcqList:
+							for dev in self.sequentialAcqList:
 								dev.continueEvent.set()
 							# synchronization... wait for all the device threads to complete
-							for dev in self.sequentialAcqList + self.partialAcqList:
+							for dev in self.sequentialAcqList:
 								dev.completeEvent.wait()
 								dev.completeEvent.clear()
+						# return to start position after end of line
+						if step[0] > 0:
+							for m in range(frames[0]+5): # frames[0]-1 + 6
+								self.motor.moveRelative('x', -step[0])
+							for m in range(6):
+								self.motor.moveRelative('x', step[0])
+						distX = 0.0 # reset relative x-distance tracker to zero
 						# return to sample arm
 						self.shutter.setShutterState((1, 0))
 						self.sequentialAcqList[0].forceSetExposure(self.scanSettings['sampleExp'])
-						self.sequentialAcqList[0].pauseBGsubtraction(False)
+						self.sequentialAcqList[0].setRefState(False)
 				if j < frames[1]-1:
-					if i%2 == 0:
+					if step[1] > 0:
 						self.motor.moveRelative('y', step[1])
-						#self.motor.setMotorAsync('moveRelative', 'y', [step[1]])
-					else:
-						self.motor.moveRelative('y', -step[1])
-						#self.motor.setMotorAsync('moveRelative', 'y', [-step[1]])
+						# reset distance tracker if just saved indices
+						if np.abs(distY) >= 0.5*imageSize:
+							distY = 0.0
+						distY += step[1]
+				else:
+					# return to start position after end of frame
+					if step[1] > 0:
+						for n in range(frames[1]+5): # frames[1]-1 + 6
+							self.motor.moveRelative('y', -step[1])
+						for n in range(6):
+							self.motor.moveRelative('y', step[1])
+					distY = 0.0
 			if i < frames[2]-1:
-				self.motor.moveRelative('z', step[2])
-				#self.motor.setMotorAsync('moveRelative', 'z', [step[2]])
-
-		# Return to start location
-		self.motor.moveAbs('x', motorCoords[0,0])
-		self.motor.moveAbs('y', motorCoords[0,1])
-		self.motor.moveAbs('z', motorCoords[0,2])
-		# Send motor position signal to update GUI
-		motorPos = self.motor.updatePosition()
-		self.motorPosUpdateSig.emit(motorPos)
+				if step[2] > 0:
+					self.motor.moveRelative('z', step[2])
+			else:
+				# return to start position after end of frame
+				if step[2] > 0:
+					for n in range(frames[2]-1):
+						self.motor.moveRelative('z', -step[2])
+			motorPos = self.motor.updatePosition()
+			self.motorPosUpdateSig.emit(motorPos)
 
 		# Wait for all processing threads to complete
 		for devProcessor in self.sequentialProcessingList + self.partialProcessingList:
@@ -216,13 +312,13 @@ class ScanManager(QtCore.QThread):
 		calFrames = calFreq.shape[0]
 		dataset = {'Andor': [], 'Mako': [], 'TempSensor': []}
 		for (dev, devProcessor) in zip(self.sequentialAcqList, self.sequentialProcessingList):
-			while devProcessor.processedData.qsize() > frames[0]*frames[1]*frames[2] + calFrames*frames[0]*frames[1]:
+			while devProcessor.processedData.qsize() > frames[0]*frames[1]*frames[2] + calFrames*frames[1]*frames[2]:
 				devProcessor.processedData.get() # pop out the first few sets of data stored before scan started
 			while not devProcessor.processedData.empty():
 				data = devProcessor.processedData.get()	# data[0] is a counter
 				dataset[dev.deviceName].append(data[1])
 		for (dev, devProcessor) in zip(self.partialAcqList, self.partialProcessingList):
-			while devProcessor.processedData.qsize() > calFrames*frames[0]*frames[1]:
+			while devProcessor.processedData.qsize() > partialAcqNum:
 				devProcessor.processedData.get() # pop out the first few sets of data stored before scan started
 			while not devProcessor.processedData.empty():
 				data = devProcessor.processedData.get()	# data[0] is a counter
@@ -240,7 +336,7 @@ class ScanManager(QtCore.QThread):
 		CMOSImage = np.array(dataset['Mako'])
 		volumeScan.SpecList = np.array([d[1] for d in dataset['Andor']])
 		calPeakDist = np.array([d[2] for d in dataset['Andor']])
-		endTime = timer()
+		#endTime = timer()
 		#print("[ScanManager] make data arrays processing time = %.3f s" % (endTime - startTime))
 		# Free up memory used by dataset
 		del dataset
@@ -248,16 +344,15 @@ class ScanManager(QtCore.QThread):
 		# Separate sample and reference frames
 		for i in range(frames[0],0,-1):
 			calPeakDist = np.delete(calPeakDist, np.s_[::i+calFrames], 0)
-		endTime = timer()
+		#endTime = timer()
 		#print("[ScanManager] delete unneeded frames processing time = %.3f s" % (endTime - startTime))
-		#startTime = timer()
-		# Save one CMOS image per calibration step (the 2nd one)
-		CMOSImage = CMOSImage[1::calFrames]
-		endTime = timer()
-		#print("[ScanManager] choose 2nd frames processing time = %.3f s" % (endTime - startTime))
-		volumeScan.CMOSImage = CMOSImage
+		if takeFluorescence:
+			volumeScan.BrightfieldImage = CMOSImage[indices] # Only save one CMOS image every 1/2 imageSize in Y
+			volumeScan.FluorescenceImage = CMOSImage[indices+1] # Only save one CMOS image every 1/2 imageSize in Y
+		else:
+			volumeScan.BrightfieldImage = CMOSImage[indices] # Only save one CMOS image every 1/2 imageSize in Y
+			volumeScan.FluorescenceImage = np.zeros(1)
 		volumeScan.MotorCoords = motorCoords
-		volumeScan.Screenshot = self.scanSettings['screenshot']
 		volumeScan.flattenedParamList = self.scanSettings['flattenedParamList']	#save all GUI paramaters
 
 		# Find SD / FSR of final calibration curve
@@ -273,9 +368,15 @@ class ScanManager(QtCore.QThread):
 		volumeScan.SD = self.SDcal
 		volumeScan.FSR = self.FSRcal
 
+		# Save data to file
 		self.sessionData.experimentList[self.saveExpIndex].addScan(volumeScan)
 		scanIdx = self.sessionData.experimentList[self.saveExpIndex].size() - 1
 		self.sessionData.saveToFile([(self.saveExpIndex,[scanIdx])])
+		# Save screenshots directly as image files
+		path = os.path.dirname(self.sessionData.filename) + '\\Screenshots\\'
+		name = os.path.splitext(self.sessionData.name)[0]
+		for n, s in enumerate(screenshots):
+			s.save(path + name + '_Exp_%d_Scan_%d_%d.png' %(self.saveExpIndex, scanIdx, n))
 
 		# finally return to free running settings before the scan started
 		for (dev, devProcessor) in zip(self.sequentialAcqList + self.partialAcqList, self.sequentialProcessingList + self.partialProcessingList):

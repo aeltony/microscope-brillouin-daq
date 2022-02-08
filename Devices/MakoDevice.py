@@ -7,7 +7,7 @@ from PyQt5.QtCore import pyqtSignal
 import numpy as np
 
 # Called "Mako" for historical reasons, this is a FLIR camera.
-# This is the CMOS camera.
+# This is the brightfield/epifluorescence CMOS camera.
 
 class MakoDevice(Devices.BrillouinDevice.Device):
 
@@ -36,7 +36,6 @@ class MakoDevice(Devices.BrillouinDevice.Device):
         else:
             print('[MakoDevice] FLIR camera could not be initialized')
         self.set_up()
-        self.camera.BeginAcquisition()
         self.mako_lock = app.mako_lock
         self.runMode = 0    #0 is free running, 1 is scan
     
@@ -51,9 +50,12 @@ class MakoDevice(Devices.BrillouinDevice.Device):
             self.camera.ExposureTime.SetValue(20000) # us
             self.camera.GainAuto.SetValue(PySpin.GainAuto_Off)
             self.camera.Gain.SetValue(0) # dB
-            self.camera.AcquisitionFrameRateEnable.SetValue(True)
-            self.camera.AcquisitionFrameRate.SetValue(5) # Hz
-            self.camera.AcquisitionMode.SetValue(0)
+            self.camera.GammaEnable.SetValue(False)
+            self.camera.AcquisitionFrameRateEnable.SetValue(False) # True for manual control
+            #self.camera.AcquisitionFrameRate.SetValue(3) # Hz
+            self.camera.AcquisitionMode.SetValue(1) # 0 = Continuous, 1 = Single Frame
+            self.camera.PixelFormat.SetValue(PySpin.PixelFormat_Mono16)
+            self.camera.AdcBitDepth.SetValue(PySpin.AdcBitDepth_Bit12)
         except PySpin.SpinnakerException as ex:
             print(str(ex))
         print('[MakoDevice] Set-up complete')
@@ -63,10 +65,6 @@ class MakoDevice(Devices.BrillouinDevice.Device):
 
     def shutdown(self):
         print("[MakoDevice] Closing Device")
-        try:
-            self.camera.EndAcquisition()
-        except:
-            print("[MakoDevice] Could not stop acquisition")
         try:
             self.camera.DeInit()
             self.camera = None
@@ -78,21 +76,22 @@ class MakoDevice(Devices.BrillouinDevice.Device):
     # getData() acquires an image from Mako
     def getData(self):
         with self.mako_lock:
+            self.camera.BeginAcquisition()
             #imgData = np.zeros((self.imageWidth,self.imageHeight), dtype=int)
             try:
-                self.image_result = self.camera.GetNextImage(1000)
+                self.image_result = self.camera.GetNextImage(100000)
             except:
                 print('[MakoDevice] Empty buffer when acquiring image')
                 imgData = np.zeros((self.imageWidth,self.imageHeight), dtype=int)
                 image_arr = np.ndarray(buffer = imgData,
-                                       dtype = np.uint8,
+                                       dtype = np.uint16,
                                        shape = (self.imageHeight,self.imageWidth))
                 return image_arr
             if self.image_result.IsIncomplete():
                 print('[MakoDevice] Image incomplete with image status %d ...' % self.image_result.GetImageStatus())
                 imgData = np.zeros((self.imageWidth,self.imageHeight), dtype=int)
                 image_arr = np.ndarray(buffer = imgData,
-                                       dtype = np.uint8,
+                                       dtype = np.uint16,
                                        shape = (self.imageHeight,self.imageWidth))
                 return image_arr
             else:
@@ -100,19 +99,24 @@ class MakoDevice(Devices.BrillouinDevice.Device):
                 height = self.image_result.GetHeight()
                 #print('[MakoDevice] Grabbed Image with width = %d, height = %d' % (width, height))
             image_arr = np.ndarray(buffer = self.image_result.GetNDArray(),
-                            dtype = np.uint8,
+                            dtype = np.uint16,
                             shape = (height,width))
             self.image_result.Release()
+            self.camera.EndAcquisition()
         return image_arr
 
     def setExpTime(self, expTime):
         #print('[MakoDevice] setExpTime got called with value=', expTime)
-        self.changeSetting(self.mako_lock, lambda:self.camera.ExposureTime.SetValue(expTime*1000))
+        #self.changeSetting(self.mako_lock, lambda:self.camera.ExposureTime.SetValue(expTime*1000))
+        with self.mako_lock:
+            self.camera.ExposureTime.SetValue(expTime*1000)
         #print("[MakoDevice] Exposure time set to %.3f ms" % expTime)
 
     def setFrameRate(self, frameRate):
         #print('[MakoDevice] setFrameRate got called with value=', frameRate)
-        self.changeSetting(self.mako_lock, lambda:self.camera.AcquisitionFrameRate.SetValue(frameRate))
+        with self.mako_lock:
+            self.camera.AcquisitionFrameRate.SetValue(frameRate)
+        #self.changeSetting(self.mako_lock, lambda:self.camera.AcquisitionFrameRate.SetValue(frameRate))
         #print("[MakoDevice] Frame rate set to %.3f Hz" % frameRate)
 
 # This class does the computation for free running mode, mostly displaying

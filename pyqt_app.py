@@ -2,10 +2,8 @@ import threading
 import datetime
 import numpy as np
 import time
-import math
 import sys
 import os
-import ntpath
 import csv
 from PyQt5 import QtGui, QtCore, QtWidgets
 from PyQt5.QtCore import QTimer
@@ -59,68 +57,86 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.maxRowPoints = 20 # Number of pixels per row in freerunning Brillouin map
         self.maxColPoints = 20 # Number of pixels per column in freerunning Brillouin map
         self.calPoints = 0 # Number of calibration points (used when scanning)
-        laserX = self.configParser.getint('Scan', 'laser_position_x')
-        laserY = self.configParser.getint('Scan', 'laser_position_y')
-        FSR = self.configParser.getfloat('Scan', 'FSR')
-        SD = self.configParser.getfloat('Scan', 'SD')
-        RFpower = self.configParser.getfloat('Synth', 'RF_power')
+        self.xy_microstep_size = 0.15625 # Sample stage (Zaber) microstep resolution in um
+        laserX = self.configParser.getfloat('More Settings', 'laser_position_x')
+        laserY = self.configParser.getfloat('More Settings', 'laser_position_y')
+        FSR = self.configParser.getfloat('More Settings', 'FSR')
+        SD = self.configParser.getfloat('More Settings', 'SD')
+        whitePower = self.configParser.getfloat('Lamps', 'white')
+        bluePower = self.configParser.getfloat('Lamps', 'blue')
+        redPower = self.configParser.getfloat('Lamps', 'red')
+        transPower = self.configParser.getfloat('Lamps', 'trans')
         spectColumn = self.configParser.getint('Andor', 'spect_column')
         spectRow = self.configParser.getint('Andor', 'spect_row')
+        RFpower = self.configParser.getfloat('Synth', 'rf_power')
+        countsTarget = self.configParser.getint('Synth', 'counts_target')
+        corrFactor = self.configParser.getfloat('Synth', 'corr_factor')
+        frameNumX = 20
+        frameNumY = 20
 
         self.params = [
             {'name': 'Scan', 'type': 'group', 'children': [
                 {'name': 'Step Size', 'type': 'group', 'children': [
-                    {'name': 'X', 'type': 'float', 'value': 1, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5},
-                    {'name': 'Y', 'type': 'float', 'value': 1, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5},
-                    {'name': 'Z', 'type': 'float', 'value': 1, 'suffix':' um', 'step': 1, 'limits':(0,1000),'decimals':5}]},
+                    {'name': 'X', 'type': 'float', 'value': 0.9375, 'suffix':' um', 'step': self.xy_microstep_size, 'limits':(0,1562.5),'decimals':5},
+                    {'name': 'Y', 'type': 'float', 'value': 0.9375, 'suffix':' um', 'step': self.xy_microstep_size, 'limits':(0,1562.5),'decimals':5},
+                    {'name': 'Z', 'type': 'float', 'value': 0, 'suffix':' um', 'step': 0.15, 'limits':(0,1500),'decimals':5}]},
                 {'name': 'Frame Number', 'type': 'group', 'children': [
-                    {'name': 'X', 'type': 'int', 'value': 5, 'step': 1, 'limits':(1,2000)},
-                    {'name': 'Y', 'type': 'int', 'value': 5, 'step': 1, 'limits':(1,2000)},
-                    {'name': 'Z', 'type': 'int', 'value': 5, 'step': 1, 'limits':(1,2000)}]},
-                {'name': 'Ambient Temp.', 'type': 'float', 'value': 0.0, 'suffix':' deg. C', 'readonly':True, 'decimals':4},
-                {'name': 'FSR', 'type': 'float', 'value': FSR, 'suffix':' GHz', 'limits':(5, 100), 'decimals':5},
-                {'name': 'SD', 'type': 'float', 'value': SD, 'suffix':' GHz/px', 'limits':(0, 2), 'decimals':4},
-                {'name': 'ToggleReference', 'type':'toggle', 'ButtonText':('Switch to Reference', 'Switch to Sample')},         #False=Sample="Switch to Ref"
-                {'name': 'Scan/Cancel', 'type': 'action2', 'ButtonText':('Scan', 'Cancel')},
-                {'name': 'More Settings', 'type': 'group', 'children': [
-                    {'name': 'Laser Focus X', 'type': 'int', 'value': laserX, 'suffix':' px', 'limits':(1,2048),'decimals':4},
-                    {'name': 'Laser Focus Y', 'type': 'int', 'value': laserY, 'suffix':' px', 'limits':(1,2048),'decimals':4}
-                ]}
+                    {'name': 'X', 'type': 'int', 'value': frameNumX, 'step': 1, 'limits':(1,2000)},
+                    {'name': 'Y', 'type': 'int', 'value': frameNumY, 'step': 1, 'limits':(1,2000)},
+                    {'name': 'Z', 'type': 'int', 'value': 1, 'step': 1, 'limits':(1,2000)}]},
+                {'name': 'ToggleReference', 'type':'toggle', 'ButtonText':('Switch to Reference', 'Switch to Sample')}, #False=Sample="Switch to Ref"
+                {'name': 'Scan/Cancel', 'type': 'action2', 'ButtonText':('Scan', 'Cancel')}
             ]},
             {'name': 'Display', 'type': 'group', 'children': [
-                {'name': 'Colormap (min.)', 'type': 'float', 'value': 5.58, 'suffix':' GHz', 'step': 0.01, 'limits':(0.0, 22.0), 'decimals':3},
-                {'name': 'Colormap (max.)', 'type': 'float', 'value': 5.82, 'suffix':' GHz', 'step': 0.01, 'limits':(0.1, 22.0), 'decimals':3}
+                {'name': 'Colormap (min.)', 'type': 'float', 'value': 4.9, 'suffix':' GHz', 'step': 0.01, 'limits':(0.0, 22.0), 'decimals':3},
+                {'name': 'Colormap (max.)', 'type': 'float', 'value': 5.6, 'suffix':' GHz', 'step': 0.01, 'limits':(0.1, 22.0), 'decimals':3}
             ]},
             {'name': 'Motor', 'type': 'group', 'children': [
-                {'name': 'Current X location', 'type': 'float', 'value':0, 'suffix':' um', 'readonly': True, 'decimals':6},
-                {'name': 'Current Y location', 'type': 'float', 'value':0, 'suffix':' um', 'readonly': True, 'decimals':6},
-                {'name': 'Current Z location', 'type': 'float', 'value':0, 'suffix':' um', 'readonly': True, 'decimals':6},
-                {'name': 'Jog step', 'type': 'float', 'value': 10, 'suffix':' um', 'step': 1, 'limits':(0, 5000)},
+                {'name': 'Curr. X location', 'type': 'float', 'value':0, 'suffix':' um', 'readonly': True, 'decimals':6},
+                {'name': 'Curr. Y location', 'type': 'float', 'value':0, 'suffix':' um', 'readonly': True, 'decimals':6},
+                {'name': 'Curr. Z location', 'type': 'float', 'value':0, 'suffix':' um', 'readonly': True, 'decimals':6},
+                {'name': 'Jog step', 'type': 'float', 'value': 1, 'suffix':' um', 'step': 1, 'limits':(0, 5000)},
                 {'name': 'Jog X', 'type': 'action3', 'ButtonText':('Jog X +', 'Jog X -', 'Home X')},
                 {'name': 'Jog Y', 'type': 'action3', 'ButtonText':('Jog Y +', 'Jog Y -', 'Home Y')},
                 {'name': 'Jog Z', 'type': 'action3', 'ButtonText':('Jog Z +', 'Jog Z -', 'Home Z')},
                 {'name': 'Move to location', 'type': 'float', 'value':0, 'suffix':' um', 'limits':(0, 100000), 'decimals':5},
                 {'name': 'Move', 'type':'action3', 'ButtonText':('Move X', 'Move Y', 'Move Z')}
             ]},
-            {'name': 'Microwave Source', 'type': 'group', 'children': [
-                {'name': 'RF Frequency', 'type': 'float', 'value': 5.75, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
-                {'name': 'RF Power', 'type': 'float', 'value': RFpower, 'suffix':' dBm', 'step': 0.1, 'limits': (-20, 10), 'decimals':2},
-                {'name': 'Cal. Freq (min.)', 'type': 'float', 'value': 5.58, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
-                {'name': 'Cal. Freq (max.)', 'type': 'float', 'value': 5.82, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
-                {'name': 'Cal. Freq (step)', 'type': 'float', 'value': 0.08, 'suffix':' GHz', 'step': 0.001, 'limits': (0.001, 13.0), 'decimals':3}
-            ]},
             {'name': 'Spectrometer Camera', 'type': 'group', 'children': [
                 {'name': 'Background Subtraction', 'type':'toggle', 'ButtonText':('Turn on background subtraction', 'Turn off background subtraction')},
-                {'name': 'Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.05, 'limits':(0.01, 10)},
-                {'name': 'Ref. Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.05, 'limits':(0.01, 10)},
-                {'name': 'AutoExposure', 'type':'toggle', 'ButtonText':('Auto exposure', 'Fixed exposure')},         #False=Fixed exposure
-                {'name': 'Spectrum Column', 'type':'int', 'value': spectColumn, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
-                {'name': 'Spectrum Row', 'type':'int', 'value': spectRow, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
-                {'name': 'Camera Temp.', 'type': 'float', 'value':0, 'suffix':' C', 'readonly': True}
-            ]},        
+                {'name': 'Exposure', 'type':'float', 'value':0.3, 'suffix':' s', 'step':0.01, 'limits':(0.001, 60)},
+                {'name': 'Ref. Exposure', 'type':'float', 'value':0.1, 'suffix':' s', 'step':0.01, 'limits':(0.001, 10)},
+                #{'name': 'AutoExposure', 'type':'toggle', 'ButtonText':('Auto exposure', 'Fixed exposure')}, #False=Fixed exposure
+                #{'name': 'Camera Temp.', 'type': 'float', 'value':0, 'suffix':' C', 'readonly': True}
+            ]},
             {'name': 'Microscope Camera', 'type': 'group', 'children': [
-                {'name': 'Exposure Time', 'type': 'float', 'value': 20, 'suffix':' ms', 'limits':(0.001, 10000)},
-                {'name': 'Frame Rate', 'type': 'int', 'value': 5, 'suffix':' Hz', 'limits':(1, 20)}
+                {'name': 'Brightfield Exp.', 'type': 'float', 'value': 20, 'suffix':' ms', 'limits':(0.001, 20000)},
+                {'name': 'Fluoresc. Exp.', 'type': 'float', 'value': 200, 'suffix':' ms', 'limits':(0.001, 20000)},
+                {'name': 'White Light', 'type': 'float', 'value': whitePower, 'suffix':' %', 'step': 1, 'limits': (0, 100), 'decimals':3},
+                {'name': 'Blue Light', 'type': 'float', 'value': bluePower, 'suffix':' %', 'step': 1, 'limits': (0, 100), 'decimals':3},
+                {'name': 'Red Light', 'type': 'float', 'value': redPower, 'suffix':' %', 'step': 1, 'limits': (0, 100), 'decimals':3},
+                {'name': 'Trans. Light', 'type': 'float', 'value': transPower, 'suffix':' %', 'step': 1, 'limits': (0, 100), 'decimals':3},
+                {'name': 'Magnification', 'type': 'float', 'value': 55, 'suffix':' X', 'limits':(0.01, 200)},
+                #{'name': 'Frame Rate', 'type': 'int', 'value': 3, 'suffix':' Hz', 'limits':(1, 20)},
+                {'name': 'ToggleFluorescence', 'type':'toggle', 'ButtonText':('Switch to Fluorescence', 'Switch to Brightfield')} #False=Brightfield="Switch to Fluorescence"
+            ]},
+            {'name': 'Microwave Source', 'type': 'group', 'children': [
+                {'name': 'Cal. Freq (min.)', 'type': 'float', 'value': 4.9, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
+                {'name': 'Cal. Freq (max.)', 'type': 'float', 'value': 5.9, 'suffix':' GHz', 'step': 0.01, 'limits': (0.05, 13.0), 'decimals':3},
+                {'name': 'Cal. Freq (step)', 'type': 'float', 'value': 0.35, 'suffix':' GHz', 'step': 0.001, 'limits': (0.001, 13.0), 'decimals':3},
+                {'name': 'RF Power', 'type': 'float', 'value': RFpower, 'suffix':' dBm', 'step': 0.1, 'limits': (-50, 10), 'decimals':2},
+                {'name': 'RF Frequency', 'type': 'float', 'value': 5.5, 'suffix':' GHz', 'step': 0.1, 'limits': (0.05, 13.0), 'decimals':3},
+                {'name': 'Counts Target', 'type': 'int', 'value': countsTarget, 'suffix':' counts', 'step':10000, 'limits':(1, 500000)},
+                {'name': 'Corr. Factor', 'type': 'float', 'value': corrFactor, 'step': 0.1, 'limits': (0.0, 1000.0), 'decimals':3}
+            ]},
+            {'name': 'More Settings', 'type': 'group', 'children': [
+                {'name': 'Ambient Temp.', 'type': 'float', 'value': 0.0, 'suffix':' deg. C', 'readonly':True, 'decimals':4},
+                {'name': 'FSR', 'type': 'float', 'value': FSR, 'suffix':' GHz', 'limits':(5, 100), 'decimals':5},
+                {'name': 'SD', 'type': 'float', 'value': SD, 'suffix':' GHz/px', 'limits':(0, 2), 'decimals':4},
+                {'name': 'Spectrum Col.', 'type':'int', 'value': spectColumn, 'suffix':' px', 'step':1, 'limits':(0, 2048)},
+                {'name': 'Spectrum Row', 'type':'int', 'value': spectRow, 'suffix':' px', 'step': 1, 'limits':(0, 2048)},
+                {'name': 'Laser Focus X', 'type': 'float', 'value': laserX, 'suffix':' um', 'step': 0.1, 'limits':(-5000.0, 5000.0),'decimals':3},
+                {'name': 'Laser Focus Y', 'type': 'float', 'value': laserY, 'suffix':' um', 'step': 0.1, 'limits':(-5000.0, 5000.0),'decimals':3}
             ]}
         ]
         ## Create tree of Parameter objects
@@ -172,16 +188,24 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.CMOSview = pg.PlotItem()
         self.graphicsViewCMOS.setCentralItem(self.CMOSview)     # GraphicsView is the main graphics container
         self.CMOSview.setAspectLocked(True)
-        self.CMOSImage = pg.ImageItem(np.zeros((self.MakoDeviceThread.imageWidth//self.MakoDeviceThread.bin_size, self.MakoDeviceThread.imageHeight//self.MakoDeviceThread.bin_size)))      # ImageItem contains what needs to be plotted
+        self.pxWid = self.MakoDeviceThread.imageWidth//self.MakoDeviceThread.bin_size
+        self.pxHt = self.MakoDeviceThread.imageHeight//self.MakoDeviceThread.bin_size
+        self.CMOSImage = pg.ImageItem(np.zeros((self.pxWid, self.pxHt)))      # ImageItem contains what needs to be plotted
+        self.scaleFactor = 4.5/self.allParameters.child('Microscope Camera').child('Magnification').value() # 4.5 um/px
+        self.CMOSImage.translate(-0.5*self.pxWid*self.scaleFactor, -0.5*self.pxHt*self.scaleFactor)
+        self.CMOSImage.scale(self.scaleFactor, self.scaleFactor)
         self.CMOSview.addItem(self.CMOSImage)
         self.CMOSview.autoRange(padding=0)                      # gets rid of padding
-        self.CMOSvLine = pg.InfiniteLine(angle=90, movable=False)
-        self.CMOShLine = pg.InfiniteLine(angle=0, movable=False)
-        self.CMOSview.addItem(self.CMOSvLine, ignoreBounds=True)
-        self.CMOSview.addItem(self.CMOShLine, ignoreBounds=True)
-        self.CMOSvLine.setPos(laserX)
-        self.CMOShLine.setPos(laserY)
-        self.makoPoints = np.array([])    # To display previous scan points
+        (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, frameNumX-1, frameNumY-1)
+        self.scanRegion = pg.PlotDataItem(scanRegX, scanRegY)
+        self.scanRegion.setPen(width=1, color='r')
+        self.CMOSview.addItem(self.scanRegion)
+        #self.CMOSvLine = pg.InfiniteLine(angle=90, movable=False)
+        #self.CMOShLine = pg.InfiniteLine(angle=0, movable=False)
+        #self.CMOSview.addItem(self.CMOSvLine, ignoreBounds=True)
+        #self.CMOSview.addItem(self.CMOShLine, ignoreBounds=True)
+        #self.CMOSvLine.setPos(laserX)
+        #self.CMOShLine.setPos(laserY)
 
         # Import standard Brillouin colormap data
         arr = []
@@ -191,6 +215,14 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
                 arr.append([float(x) for x in row] + [1]) # RGBA, 0.0 to 1.0
         self.heatmapColormapArray = np.array(arr)
         self.colormap = pg.ColorMap(np.linspace(0, 1, len(self.heatmapColormapArray)), self.heatmapColormapArray)
+
+        # Import EOM calibration curve
+        arr = []
+        with open('Utilities\\freq_vs_counts.txt', 'r') as f:
+            reader = csv.reader(f, delimiter='\t')
+            for row in reader:
+                arr.append([float(x) for x in row])
+        self.EOMcalCurve = np.array(arr)
 
         # Data acquisition Heatmap
         self.heatmapScanData = np.array([])
@@ -209,7 +241,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.SampleView = CustomViewBox(invertY=True)
         self.graphicsViewSample.setCentralItem(self.SampleView)
         self.SampleView.setAspectLocked(True)
-        self.SampleImage = pg.ImageItem(np.zeros((850, 200)))
+        self.SampleImage = pg.ImageItem(np.zeros((860, 200)))
         self.SampleView.addItem(self.SampleImage)
         self.SampleView.autoRange(padding=0)
 
@@ -217,7 +249,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.BinnedView = CustomViewBox(invertY=True)
         self.graphicsViewBinned.setCentralItem(self.BinnedView)
         self.BinnedView.setAspectLocked(True)
-        self.BinnedImage = pg.ImageItem(np.zeros((105, 420)))
+        self.BinnedImage = pg.ImageItem(np.zeros((440, 100)))
         self.BinnedView.addItem(self.BinnedImage)
         self.BinnedView.autoRange(padding=0)
 
@@ -242,7 +274,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
         # sampleScanDepthPlot is the Brillouin vs z axis plot
         self.sampleScanDepthPlot = pg.PlotItem()
-        self.sampleScanDepthPlot.setYRange(5,6)
+        self.sampleScanDepthPlot.setYRange(4.95,5.95)
         self.graphicsViewSampleScanDepth.setCentralItem(self.sampleScanDepthPlot)
         self.sampleScanDepthPlot.enableAutoRange(axis=self.sampleScanDepthPlot.vb.XAxis, enable=True)
         self.sampleScanDepthItem = pg.PlotDataItem() 
@@ -287,6 +319,10 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         # Apply settings from config file
         self.AndorDeviceThread.setTopPx(int(spectColumn))
         self.AndorDeviceThread.setLeftPx(int(spectRow))
+        self.ZaberDevice.setPower('white', whitePower)
+        self.ZaberDevice.setPower('blue', bluePower)
+        self.ZaberDevice.setPower('red', redPower)
+        self.ZaberDevice.setPower('trans', transPower)
         self.SynthDevice.setPower(RFpower)
 
         self.InitHardwareParameterTree()
@@ -300,29 +336,42 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         # ========================= Spectrometer Camera =============================
         pItem = self.allParameters.child('Spectrometer Camera')
         pItem.child('Background Subtraction').sigActivated.connect(self.bgSubtraction)
-        pItem.child('AutoExposure').sigActivated.connect(self.switchAutoExp)
+        #pItem.child('AutoExposure').sigActivated.connect(self.switchAutoExp)
         pItem.child('Exposure').sigValueChanged.connect(
             lambda data: self.changeHardwareSetting(data, self.AndorDeviceThread.setExposure))
+        pItem.child('Ref. Exposure').sigValueChanged.connect(
+            lambda data: self.changeHardwareSetting(data, self.AndorDeviceThread.setExposure))
         pItem.child('Exposure').setValue(self.AndorDeviceThread.getExposure())
-        pItem.child('Camera Temp.').setValue(self.AndorDeviceThread.getTemperature())
-        # Spectrum Column / Row adjustment
-        pItem.child('Spectrum Column').sigValueChanging.connect(self.spectColumnValueChange)
-        pItem.child('Spectrum Row').sigValueChanging.connect(self.spectRowValueChange)
+        #pItem.child('Camera Temp.').setValue(self.AndorDeviceThread.getTemperature())
 
-        # ========================= Monitor Camera ==================================
+        # ========================= Brightfield Camera ==================================
         pItem = self.allParameters.child('Microscope Camera')
-        pItem.child('Exposure Time').sigValueChanged.connect(
+        pItem.child('Brightfield Exp.').sigValueChanged.connect(
             lambda data: self.changeHardwareSetting(data, self.MakoDeviceThread.setExpTime))
-        pItem.child('Frame Rate').sigValueChanged.connect(
-            lambda data: self.changeHardwareSetting(data, self.MakoDeviceThread.setFrameRate))
+        pItem.child('Fluoresc. Exp.').sigValueChanged.connect(
+            lambda data: self.changeHardwareSetting(data, self.MakoDeviceThread.setExpTime))
+        pItem.child('ToggleFluorescence').sigActivated.connect(self.toggleFluorescence)
+        pItem.child('White Light').sigValueChanged.connect(self.whiteLightPowerChange)
+        pItem.child('White Light').setValue(self.ZaberDevice.getPower('white'))
+        pItem.child('Blue Light').sigValueChanged.connect(self.blueLightPowerChange)
+        pItem.child('Blue Light').setValue(self.ZaberDevice.getPower('blue'))
+        pItem.child('Red Light').sigValueChanged.connect(self.redLightPowerChange)
+        pItem.child('Red Light').setValue(self.ZaberDevice.getPower('red'))
+        pItem.child('Trans. Light').sigValueChanged.connect(self.transLightPowerChange)
+        pItem.child('Trans. Light').setValue(self.ZaberDevice.getPower('trans'))
+        pItem.child('Magnification').sigValueChanged.connect(self.magnificationChange)
+        #pItem.child('Frame Rate').sigValueChanged.connect(
+        #    lambda data: self.changeHardwareSetting(data, self.MakoDeviceThread.setFrameRate))
 
         # ========================= Microwave Source ================================
         pItem = self.allParameters.child('Microwave Source')
         pItem.child('RF Frequency').sigValueChanged.connect(
             lambda data: self.changeHardwareSetting(data, self.SynthDevice.setFreq))
         pItem.child('RF Frequency').setValue(self.SynthDevice.getFreq())
-        pItem.child('RF Power').sigValueChanging.connect(self.synthPowerValueChange)
+        pItem.child('RF Power').sigValueChanged.connect(self.synthPowerValueChange)
         pItem.child('RF Power').setValue(self.SynthDevice.getPower())
+        pItem.child('Corr. Factor').sigValueChanged.connect(self.synthCorrFactorValueChange)
+        pItem.child('Counts Target').sigValueChanged.connect(self.synthCountsTargetValueChange)
 
         # ========================= Motor ===========================================
         pItem = self.allParameters.child('Motor')
@@ -366,22 +415,30 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
 
         # ========================= Scan ===========================================
         pItem = self.allParameters.child('Scan')
+        pItem.child('Step Size').child('X').sigValueChanged.connect(self.stepSizeValueChangeX)
+        pItem.child('Step Size').child('Y').sigValueChanged.connect(self.stepSizeValueChangeY)
+        pItem.child('Frame Number').child('X').sigValueChanged.connect(self.frameNumValueChangeX)
+        pItem.child('Frame Number').child('Y').sigValueChanged.connect(self.frameNumValueChangeY)
         pItem.child('Scan/Cancel').sigActivated.connect(self.startScan)
         pItem.child('Scan/Cancel').sigActivated2.connect(self.cancelScan)
         pItem.child('ToggleReference').sigActivated.connect(self.toggleReference)
-        pItem.child('FSR').sigValueChanging.connect(self.FSRValueChange)
-        pItem.child('SD').sigValueChanging.connect(self.SDValueChange)
+
+        # ========================= More Settings ==================================
+        pItem = self.allParameters.child('More Settings')
+        pItem.child('FSR').sigValueChanged.connect(self.FSRValueChange)
+        pItem.child('SD').sigValueChanged.connect(self.SDValueChange)
+        # Spectrum Column / Row adjustment
+        pItem.child('Spectrum Col.').sigValueChanged.connect(self.spectColumnValueChange)
+        pItem.child('Spectrum Row').sigValueChanged.connect(self.spectRowValueChange)
         # Laser crosshair adjustment
-        pItem.child('More Settings').child('Laser Focus X').sigValueChanging.connect(
-            self.CMOSvLineValueChange)
-        pItem.child('More Settings').child('Laser Focus Y').sigValueChanging.connect(
-            self.CMOShLineValueChange)
+        pItem.child('Laser Focus X').sigValueChanged.connect(self.CMOSvLineValueChange)
+        pItem.child('Laser Focus Y').sigValueChanged.connect(self.CMOShLineValueChange)
 
         # ========================= Hardware monitor timers ========================
 
-        self.hardwareGetTimer = QTimer()
-        self.hardwareGetTimer.timeout.connect(self.HardwareParamUpdate)
-        self.hardwareGetTimer.start(10000)
+        #self.hardwareGetTimer = QTimer()
+        #self.hardwareGetTimer.timeout.connect(self.HardwareParamUpdate)
+        #self.hardwareGetTimer.start(600000)
 
         # Separate timer for motor position, update at faster rate
         self.motorPositionTimer = QTimer()
@@ -392,55 +449,155 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         # print("[changeHardwareSetting]")
         funcHandle(data.value())
 
-    def HardwareParamUpdate(self):
-        # print("[HardwareParamUpdate]")
-        temp = self.AndorDeviceThread.getTemperature()
-        self.allParameters.child('Spectrometer Camera').child('Camera Temp.').setValue(temp)
-        # if (self.ShutterDevice.state == ShutterDevice.SAMPLE_STATE):
-            # expTime = self.AndorDeviceThread.getExposure()
-            # self.allParameters.child('Spectrometer Camera').child('Exposure').setValue(expTime)
+    #def HardwareParamUpdate(self):
+    #    #print("[HardwareParamUpdate]")
+    #    try:
+    #        temp = self.AndorDeviceThread.getTemperature()
+    #        self.allParameters.child('Spectrometer Camera').child('Camera Temp.').setValue(temp)
+    #    except:
+    #        print('Could not update AndorDevice temperature')
 
     @QtCore.pyqtSlot(list)
     def MotorPositionUpdate2(self, pos):
         #print("[MotorPositionUpdate2]")
-        self.allParameters.child('Motor').child('Current X location').setValue(pos[0])
-        self.allParameters.child('Motor').child('Current Y location').setValue(pos[1])
-        self.allParameters.child('Motor').child('Current Z location').setValue(pos[2])
+        self.allParameters.child('Motor').child('Curr. X location').setValue(pos[0])
+        self.allParameters.child('Motor').child('Curr. Y location').setValue(pos[1])
+        self.allParameters.child('Motor').child('Curr. Z location').setValue(pos[2])
 
     def MotorPositionUpdate(self):
         #print("[MotorPositionUpdate]")
         pos = self.ZaberDevice.updatePosition()
-        self.allParameters.child('Motor').child('Current X location').setValue(pos[0])
-        self.allParameters.child('Motor').child('Current Y location').setValue(pos[1])
-        self.allParameters.child('Motor').child('Current Z location').setValue(pos[2])
+        self.allParameters.child('Motor').child('Curr. X location').setValue(pos[0])
+        self.allParameters.child('Motor').child('Curr. Y location').setValue(pos[1])
+        self.allParameters.child('Motor').child('Curr. Z location').setValue(pos[2])
+
+    def drawSquare(self, laserX, laserY, lenX, lenY):
+        ptsPerSide = 10
+        x = np.linspace(laserX, laserX + lenX, num=ptsPerSide, endpoint=True)
+        y = np.linspace(laserY, laserY - lenY, num=ptsPerSide, endpoint=True)
+        scanRegX = np.concatenate((x, (laserX + lenX)*np.ones(ptsPerSide), np.flip(x), laserX*np.ones(ptsPerSide)))
+        scanRegY = np.concatenate((laserY*np.ones(ptsPerSide), y, (laserY - lenY)*np.ones(ptsPerSide), np.flip(y)))
+        return (scanRegX, scanRegY)
+
+    def stepSizeValueChangeX(self, param, value):
+        corrStepSizeX = self.xy_microstep_size*int(value/self.xy_microstep_size) # correct for quantization of steps
+        laserX = self.allParameters.child('More Settings').child('Laser Focus X').value()
+        laserY = self.allParameters.child('More Settings').child('Laser Focus Y').value()
+        lenX = corrStepSizeX*(self.allParameters.child('Scan').child('Frame Number').child('X').value()-1)
+        lenY = self.allParameters.child('Scan').child('Step Size').child('Y').value()*(self.allParameters.child('Scan').child('Frame Number').child('Y').value()-1)
+        (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, lenX, lenY)
+        self.scanRegion.setData(scanRegX, scanRegY)
+        self.allParameters.child('Scan').child('Step Size').child('X').setValue(corrStepSizeX) # update display to show quantized step
+
+    def stepSizeValueChangeY(self, param, value):
+        corrStepSizeY = self.xy_microstep_size*int(value/self.xy_microstep_size) # correct for quantization of steps
+        laserX = self.allParameters.child('More Settings').child('Laser Focus X').value()
+        laserY = self.allParameters.child('More Settings').child('Laser Focus Y').value()
+        lenX = self.allParameters.child('Scan').child('Step Size').child('X').value()*(self.allParameters.child('Scan').child('Frame Number').child('X').value()-1)
+        lenY = corrStepSizeY*(self.allParameters.child('Scan').child('Frame Number').child('Y').value()-1)
+        (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, lenX, lenY)
+        self.scanRegion.setData(scanRegX, scanRegY)
+        self.allParameters.child('Scan').child('Step Size').child('Y').setValue(corrStepSizeY) # update display to show quantized step
+
+    def frameNumValueChangeX(self, param, value):
+        laserX = self.allParameters.child('More Settings').child('Laser Focus X').value()
+        laserY = self.allParameters.child('More Settings').child('Laser Focus Y').value()
+        lenX = self.allParameters.child('Scan').child('Step Size').child('X').value()*(value-1)
+        lenY = self.allParameters.child('Scan').child('Step Size').child('Y').value()*(self.allParameters.child('Scan').child('Frame Number').child('Y').value()-1)
+        (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, lenX, lenY)
+        self.scanRegion.setData(scanRegX, scanRegY)
+
+    def frameNumValueChangeY(self, param, value):
+        laserX = self.allParameters.child('More Settings').child('Laser Focus X').value()
+        laserY = self.allParameters.child('More Settings').child('Laser Focus Y').value()
+        lenX = self.allParameters.child('Scan').child('Step Size').child('X').value()*(self.allParameters.child('Scan').child('Frame Number').child('X').value()-1)
+        lenY = self.allParameters.child('Scan').child('Step Size').child('Y').value()*(value-1)
+        (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, lenX, lenY)
+        self.scanRegion.setData(scanRegX, scanRegY)
 
     def CMOShLineValueChange(self, param, value):
         # print("[CMOShLineValueChange]")
-        self.CMOShLine.setPos(value)
-        self.configParser.set('Scan', 'laser_position_y', str(int(value)))
+        #self.CMOShLine.setPos(value)
+        laserX = self.allParameters.child('More Settings').child('Laser Focus X').value()
+        laserY = value
+        lenX = self.allParameters.child('Scan').child('Step Size').child('X').value()*(self.allParameters.child('Scan').child('Frame Number').child('X').value()-1)
+        lenY = self.allParameters.child('Scan').child('Step Size').child('Y').value()*(self.allParameters.child('Scan').child('Frame Number').child('Y').value()-1)
+        (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, lenX, lenY)
+        self.scanRegion.setData(scanRegX, scanRegY)
+        self.configParser.set('More Settings', 'laser_position_y', str(value))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 
     def CMOSvLineValueChange(self, param, value):
         # print("[CMOSvLineValueChange]")
-        self.CMOSvLine.setPos(value)
-        self.configParser.set('Scan', 'laser_position_x', str(int(value)))
+        #self.CMOSvLine.setPos(value)
+        laserX = value
+        laserY = self.allParameters.child('More Settings').child('Laser Focus Y').value()
+        lenX = self.allParameters.child('Scan').child('Step Size').child('X').value()*(self.allParameters.child('Scan').child('Frame Number').child('X').value()-1)
+        lenY = self.allParameters.child('Scan').child('Step Size').child('Y').value()*(self.allParameters.child('Scan').child('Frame Number').child('Y').value()-1)
+        (scanRegX, scanRegY) = self.drawSquare(laserX, laserY, lenX, lenY)
+        self.scanRegion.setData(scanRegX, scanRegY)
+        self.configParser.set('More Settings', 'laser_position_x', str(value))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 
+    def magnificationChange(self):
+        # First, reset offset + scaling
+        self.CMOSImage.scale(1/self.scaleFactor, 1/self.scaleFactor)
+        self.CMOSImage.translate(0.5*self.pxWid*self.scaleFactor, 0.5*self.pxHt*self.scaleFactor)
+        # Then, update offset + scale
+        self.scaleFactor = 4.5/self.allParameters.child('Microscope Camera').child('Magnification').value() # 4.5 um/px
+        self.CMOSImage.translate(-0.5*self.pxWid*self.scaleFactor, -0.5*self.pxHt*self.scaleFactor)
+        self.CMOSImage.scale(self.scaleFactor, self.scaleFactor)
+        self.CMOSview.autoRange(padding=0)
+
     def synthPowerValueChange(self, param, value):
         self.SynthDevice.setPower(value)
-        self.configParser.set('Synth', 'RF_power', str(value))
+        self.configParser.set('Synth', 'rf_power', str(value))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
+
+    def synthCountsTargetValueChange(self, param, value):
+        self.configParser.set('Synth', 'counts_target', str(value))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
+
+    def synthCorrFactorValueChange(self, param, value):
+        self.configParser.set('Synth', 'corr_factor', str(value))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
+
+    def whiteLightPowerChange(self, param, value):
+        self.ZaberDevice.setPower('white', value)
+        self.configParser.set('Lamps', 'white', str(value))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
+
+    def blueLightPowerChange(self, param, value):
+        self.ZaberDevice.setPower('blue', value)
+        self.configParser.set('Lamps', 'blue', str(value))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
+
+    def redLightPowerChange(self, param, value):
+        self.ZaberDevice.setPower('red', value)
+        self.configParser.set('Lamps', 'red', str(value))
+        with open(self.configFilename, 'w') as f:
+            self.configParser.write(f)
+
+    def transLightPowerChange(self, param, value):
+        self.ZaberDevice.setPower('trans', value)
+        self.configParser.set('Lamps', 'trans', str(value))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 
     def FSRValueChange(self, param, value):
-        self.configParser.set('Scan', 'FSR', str(value))
+        self.configParser.set('More Settings', 'FSR', str(value))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 
     def SDValueChange(self, param, value):
-        self.configParser.set('Scan', 'SD', str(value))
+        self.configParser.set('More Settings', 'SD', str(value))
         with open(self.configFilename, 'w') as f:
             self.configParser.write(f)
 
@@ -468,39 +625,64 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         # First check that a session is running, and that an experiment is selected
         if self.session is None:
             choice = QtGui.QMessageBox.warning(self, 'Starting Scan...',
-                                                "No Session open!",
+                                                'No Session open!',
                                                 QtGui.QMessageBox.Ok)
             return
 
-        print("Starting a scan in Exp_%d: " % self.model.activeExperiment)
+        print('Starting a scan in Exp_%d: ' % self.model.activeExperiment)
 
-        # take screenshot
-        p = QtGui.QScreen.grabWindow(app.primaryScreen(), QtGui.QApplication.desktop().winId())
-        pImage = p.toImage()
-        channels = 4
-        s = pImage.bits().asstring(p.width() * p.height() * channels)
-        screenshotArr = np.frombuffer(s, dtype=np.uint8).reshape((p.height(), p.width(), channels))
+        # Check if 'Screenshots' directory exists, and if not, create one
+        dataPath = os.path.dirname(self.dataFileName) + '\\Screenshots\\'
+        if not os.path.exists(dataPath):
+            os.makedirs(dataPath)
+
         stepSizeArr = np.array([self.allParameters.child('Scan').child('Step Size').child('X').value(), \
             self.allParameters.child('Scan').child('Step Size').child('Y').value(), \
             self.allParameters.child('Scan').child('Step Size').child('Z').value()])
         frameNumArr = np.array([self.allParameters.child('Scan').child('Frame Number').child('X').value(), \
             self.allParameters.child('Scan').child('Frame Number').child('Y').value(), \
             self.allParameters.child('Scan').child('Frame Number').child('Z').value()])
+        magnification = self.allParameters.child('Microscope Camera').child('Magnification').value()
         calFreq = np.arange(self.allParameters.child('Microwave Source').child('Cal. Freq (min.)').value(), \
             self.allParameters.child('Microwave Source').child('Cal. Freq (max.)').value() + \
             self.allParameters.child('Microwave Source').child('Cal. Freq (step)').value(), \
             self.allParameters.child('Microwave Source').child('Cal. Freq (step)').value())
+        # Calculate power/exp. time settings for the calibration frequencies
+        refPower = np.zeros(calFreq.shape) # in dBm
+        refExp = np.zeros(calFreq.shape) # in seconds
+        powerThresh_mW = 1.58 # Above 2 dBm = 1.58 mW higher power drives harmonics
+        for idx, f in enumerate(calFreq):
+            closestIdx = (np.abs(self.EOMcalCurve[:,0] - calFreq[idx])).argmin()
+            power_mW = self.allParameters.child('Microwave Source').child('Counts Target').value()*self.allParameters.child('Microwave Source').child('Corr. Factor').value()/0.1/self.EOMcalCurve[closestIdx,1]
+            if power_mW < powerThresh_mW:
+                refPower[idx] = np.round(10*np.log10(power_mW), 1) # in dBm
+                refExp[idx] = 0.1 # Default ref. exposure is 0.1 s
+            else:
+                refPower[idx] = 2.0 # Above 2 dBm = 1.58 mW higher power drives harmonics
+                refExp[idx] = np.round(self.allParameters.child('Microwave Source').child('Counts Target').value()*self.allParameters.child('Microwave Source').child('Corr. Factor').value()/self.EOMcalCurve[closestIdx,1]/powerThresh_mW, 2)
+                if refExp[idx]>10:
+                    refExp[idx] = 10 # Limit ref. exposure time to 10 s maximum
 
         flattenedParamList = generateParameterList(self.params, self.allParameters)
+
+        # Check if scan should include fluorescence:
+        if (self.allParameters.child('Microscope Camera').child('ToggleFluorescence').value() == True):
+            takeFluorescence = True
+        else:
+            takeFluorescence = False
 
         scanSettings = {'step': stepSizeArr,
             'frames': frameNumArr,
             'calFreq': calFreq,
-            'laserX': self.allParameters.child('Scan').child('More Settings').child('Laser Focus X').value(),
-            'laserY': self.allParameters.child('Scan').child('More Settings').child('Laser Focus Y').value(),
-            'refExp': self.allParameters.child('Spectrometer Camera').child('Ref. Exposure').value(),
+            'refPower': refPower,
+            'refExp': refExp,
+            'magnification': magnification,
+            'laserX': self.allParameters.child('More Settings').child('Laser Focus X').value(),
+            'laserY': self.allParameters.child('More Settings').child('Laser Focus Y').value(),
             'sampleExp': self.allParameters.child('Spectrometer Camera').child('Exposure').value(),
-            'screenshot': screenshotArr,
+            'brightExp': self.allParameters.child('Microscope Camera').child('Brightfield Exp.').value(),
+            'fluorExp': self.allParameters.child('Microscope Camera').child('Fluoresc. Exp.').value(),
+            'takeFluorescence': takeFluorescence,
             'flattenedParamList': flattenedParamList }
         self.BrillouinScan.assignScanSettings(scanSettings)
         # Scale plot window to scan length (+ calFreq calibration frames per y-z coordinate)
@@ -517,7 +699,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.BrillouinScan.saveExpIndex = self.model.activeExperiment
 
         # Stop periodic polling of hardware state
-        self.hardwareGetTimer.stop()
+        #self.hardwareGetTimer.stop()
         self.motorPositionTimer.stop()
         self.BrillouinScan.motorPosUpdateSig.connect(self.MotorPositionUpdate2)
 
@@ -537,22 +719,30 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.calPoints = 0
         self.heatmapPlot.setXRange(0, self.maxRowPoints)
         self.heatmapPlot.setYRange(0, self.maxColPoints)
-
+        # Return microwave source to previous (non-calibration) set point
+        self.SynthDevice.setFreq(self.allParameters.child('Microwave Source').child('RF Frequency').value())
+        time.sleep(0.02)
+        self.SynthDevice.setPower(self.allParameters.child('Microwave Source').child('RF Power').value())
+        time.sleep(0.16)
+        # Make sure switch matches position at end of scan (brightfield)
+        self.allParameters.child('Microscope Camera').child('ToggleFluorescence').setValue(False)
         if (self.allParameters.child('Scan').child('ToggleReference').value() == True):
             self.ShutterDevice.setShutterState(self.ShutterDevice.REFERENCE_STATE)
+            self.AndorDeviceThread.setRefState(True)
         else:
             self.ShutterDevice.setShutterState(self.ShutterDevice.SAMPLE_STATE)
+            self.AndorDeviceThread.setRefState(False)
         if self.BrillouinScan.Cancel_Flag == False:
             currExp = self.session.experimentList[self.BrillouinScan.saveExpIndex]
             currScanIdx = self.session.experimentList[self.BrillouinScan.saveExpIndex].size() - 1
             SD = self.BrillouinScan.SDcal
             FSR = self.BrillouinScan.FSRcal
             if ~np.isnan(SD):
-                self.allParameters.child('Scan').child('SD').setValue(SD)
+                self.allParameters.child('More Settings').child('SD').setValue(SD)
             if ~np.isnan(FSR):
-                self.allParameters.child('Scan').child('FSR').setValue(FSR)
+                self.allParameters.child('More Settings').child('FSR').setValue(FSR)
         self.BrillouinScan.motorPosUpdateSig.disconnect(self.MotorPositionUpdate2)
-        self.hardwareGetTimer.start(10000)
+        #self.hardwareGetTimer.start(60000)
         self.motorPositionTimer.start(500)
         self.BrillouinScan.Cancel_Flag = False
         print('Scan completed')
@@ -563,30 +753,60 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         # state == False --> Sample
         if state:
             self.ShutterDevice.setShutterState(self.ShutterDevice.REFERENCE_STATE)
-            self.AndorDeviceThread.pauseBGsubtraction(True)
+            self.AndorDeviceThread.setRefState(True)
             self.AndorDeviceThread.setExposure(self.allParameters.child('Spectrometer Camera').child('Ref. Exposure').value())
         else:
             self.ShutterDevice.setShutterState(self.ShutterDevice.SAMPLE_STATE)
-            self.AndorDeviceThread.pauseBGsubtraction(False)
+            self.AndorDeviceThread.setRefState(False)
             self.AndorDeviceThread.setExposure(self.allParameters.child('Spectrometer Camera').child('Exposure').value())
+
+    def toggleFluorescence(self, sliderParam, state):
+        #print("[toggleFluorescence]")
+        # state == True --> Fluorescence
+        # state == False --> Brightfield
+        if state:
+            # Switch to filter index 2:
+            self.ZaberDevice.moveFilter(2)
+            # Turn off Brightfield lamp, turn on fluorescence lamps
+            self.ZaberDevice.lightSwitch('white', True)
+            self.ZaberDevice.lightSwitch('blue', True)
+            self.ZaberDevice.lightSwitch('red', True)
+            self.ZaberDevice.lightSwitch('trans', False)
+            # Change Mako camera exposure time
+            self.MakoDeviceThread.setExpTime(self.allParameters.child('Microscope Camera').child('Fluoresc. Exp.').value())
+        else:
+            # Switch to filter index 1:
+            self.ZaberDevice.moveFilter(1)
+            # Turn on Brightfield lamp, turn off fluorescence lamps
+            self.ZaberDevice.lightSwitch('white', False)
+            self.ZaberDevice.lightSwitch('blue', False)
+            self.ZaberDevice.lightSwitch('red', False)
+            self.ZaberDevice.lightSwitch('trans', True)
+            # Change Mako camera exposure time
+            self.MakoDeviceThread.setExpTime(self.allParameters.child('Microscope Camera').child('Brightfield Exp.').value())
 
     def bgSubtraction(self, sliderParam, state):
         if state:
+            self.ShutterDevice.closeBGshutter()
             self.AndorDeviceThread.startBGsubtraction()
-            print("Spectrometer background subtraction ON")
+            #print("Spectrometer background subtraction ON")
+            # Wait until BG subtraction is complete before re-opening shutter
+            while self.AndorDeviceThread.checkBGsubtraction():
+                time.sleep(0.1)
+            self.ShutterDevice.openBGshutter()
         else:
             self.AndorDeviceThread.stopBGsubtraction()
-            print("Spectrometer background subtraction OFF")
+            #print("Spectrometer background subtraction OFF")
 
-    def switchAutoExp(self, sliderParam, state):
-        if state:
-            self.AndorDeviceThread.setAutoExp(True)
-            print("Spectrometer auto exposure ON")
-        else:
-            self.AndorDeviceThread.setAutoExp(False)
-            self.AndorDeviceThread.setExposure(self.allParameters.child('Spectrometer Camera').child('Exposure').value())
-            print("Spectrometer auto exposure OFF")
-            # self.AndorDeviceThread.setExposure(self.allParameters.child('Spectrometer Camera').child('Exposure').value())
+    #def switchAutoExp(self, sliderParam, state):
+    #    if state:
+    #        self.AndorDeviceThread.setAutoExp(True)
+    #        print("Spectrometer auto exposure ON")
+    #    else:
+    #        self.AndorDeviceThread.setAutoExp(False)
+    #        self.AndorDeviceThread.setExposure(self.allParameters.child('Spectrometer Camera').child('Exposure').value())
+    #        print("Spectrometer auto exposure OFF")
+    #        # self.AndorDeviceThread.setExposure(self.allParameters.child('Spectrometer Camera').child('Exposure').value())
 
     #############################################################################################
     # This next group of methods callback methods to display acquired data #
@@ -594,13 +814,13 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
     
     def UpdateAmbientTemp(self, temperature):
         # print('UpdateAmbientTemp')
-        self.allParameters.child('Scan').child('Ambient Temp.').setValue(temperature)
+        self.allParameters.child('More Settings').child('Ambient Temp.').setValue(temperature)
 
     # updates the figure containing the Brillouin sequence. newData is a list
     def UpdateSampleBrillouinSeqPlot(self, interPeakDist):
         # print("[UpdateBrillouinSeqPlot]")
-        SD = self.allParameters.child('Scan').child('SD').value()
-        FSR = self.allParameters.child('Scan').child('FSR').value()
+        SD = self.allParameters.child('More Settings').child('SD').value()
+        FSR = self.allParameters.child('More Settings').child('FSR').value()
         if ~np.isnan(interPeakDist):
             newData = [0.5*(FSR - SD*interPeakDist)]
             newData2 = newData
@@ -615,7 +835,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         heatmapSeq = np.pad(self.heatmapScanData, (0, self.maxRowPoints*self.maxColPoints - self.heatmapScanData.shape[0]), 'constant')
         heatmapSeq[np.isnan(heatmapSeq)] = 0 #Remove NaNs
         heatmapArr = np.reshape(heatmapSeq, (-1, self.maxRowPoints))   # self.maxRowPoints columns
-        heatmapArr[1::2, :-self.calPoints] = np.fliplr(heatmapArr[1::2, :-self.calPoints]) # Match S-shaped line scan pattern
+        #heatmapArr[1::2, :-self.calPoints] = np.fliplr(heatmapArr[1::2, :-self.calPoints]) # Match S-shaped line scan pattern
         heatmapArr = np.rot90(heatmapArr, 1, (1,0)) # Rotate to match XY axes
         colormapLow = self.allParameters.child('Display').child('Colormap (min.)').value()
         colormapHigh = self.allParameters.child('Display').child('Colormap (max.)').value()
@@ -683,7 +903,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
     # Update binned Andor image
     def AndorBinnedProcessUpdate(self, image):
         # print("[AndorProcessUpdate]")
-        self.BinnedImage.setImage(image)
+        self.BinnedImage.setImage(image.transpose((1,0)))
 
     # Update the CMOS camera image
     def MakoProcessUpdate(self, makoData):
@@ -708,7 +928,7 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         self.sessionName.setText(filename)
 
         #create a single new session
-        self.session = SessionData(ntpath.basename(self.dataFileName), filename=filename)
+        self.session = SessionData(os.path.basename(self.dataFileName), filename=filename)
 
         # create tree model (for display)
         self.model = BrillouinTreeModel()
@@ -731,8 +951,14 @@ class App(QtGui.QMainWindow,qt_ui.Ui_MainWindow):
         if self.dataFile:
             self.dataFile.close()
 
-        self.hardwareGetTimer.stop()
+        #self.hardwareGetTimer.stop()
         self.motorPositionTimer.stop()
+        
+        # Turn all lamps off:
+        self.ZaberDevice.lightSwitch('white', False)
+        self.ZaberDevice.lightSwitch('blue', False)
+        self.ZaberDevice.lightSwitch('red', False)
+        self.ZaberDevice.lightSwitch('trans', False)
 
         self.stop_event.set()
         while self.AndorDeviceThread.isRunning():
